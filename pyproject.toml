@@ -1,0 +1,53 @@
+[tool]
+[tool.poetry]
+name = "eve_panel"
+version = "0.1.0"
+homepage = "https://github.com/jmosbacher/eve_panel"
+description = "Top-level package for Eve-Panel."
+authors = ["Yossi Mosbacher <joe.mosbacher@gmail.com>"]
+readme = "README.rst"
+license =  "MIT"
+classifiers=[
+    'Development Status :: 2 - Pre-Alpha',
+    'Intended Audience :: Developers',
+    'License :: OSI Approved :: MIT License',
+    'Natural Language :: English',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
+]
+packages = [
+    { include = "eve_panel" },
+    { include = "tests", format = "sdist" },
+]
+
+[tool.poetry.dependencies]
+python = ">=3.7"
+eve = "^1.1.3"
+panel = "^0.9.7"
+httpx = "^0.16.1"
+nested_dict = "^1.61"
+pandas = "^1.1.3"
+
+[tool.poetry.dev-dependencies]
+bumpversion = "*"
+coverage = "*"
+flake8 = "*"
+invoke = "*"
+isort = "*"
+pylint = "*"
+pytest = "*"
+sphinx = "*"
+tox = "*"
+yapf = "*"
+
+[tool.poetry.scripts]
+eve_panel = 'eve_panel.cli:main'
+
+[tool.dephell.main]
+from = {format = "poetrylock", path = "poetry.lock"}
+to = {format = "setuppy", path = "setup.py"}
+
+[build-system]
+requires = ["poetry>=0.12", "setuptools"]
+build-backend = "poetry.masonry.api"
