@@ -8,7 +8,7 @@ from .auth import EveClientAuth, EveBearerAuth
 
 class EveApiClient(EveModelBase):
     app = param.Parameter(default=None)
-    server_url = param.String(default="http://localhost:5000", regex=r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))")
+    api_root = param.String(default="http://localhost:5000", regex=r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))")
     auth = param.ClassSelector(EveClientAuth, default=EveBearerAuth())
     # domain = param.ClassSelector(EveDomain)
     _log = param.String()
@@ -23,13 +23,13 @@ class EveApiClient(EveModelBase):
     
     @classmethod
     def from_app_config(cls, config, address="http://localhost:5000", self_serve=False):
-        server_url = address.strip("/") + "/".join([config["URL_PREFIX"], config["API_VERSION"]]).replace("//","/")
-        # domain = EveDomain.from_domain_def(server_url ,config["DOMAIN"])
+        api_root = address.strip("/") + "/".join([config["URL_PREFIX"], config["API_VERSION"]]).replace("//","/")
+        # domain = EveDomain.from_domain_def(api_root ,config["DOMAIN"])
         app = None
         if self_serve:
             import eve
             app = eve.Eve(config)
-        return cls(server_url=server_url, app=app)
+        return cls(api_root=api_root, app=app)
        
     def headers(self):
         headers = self.auth.get_headers()
@@ -37,7 +37,7 @@ class EveApiClient(EveModelBase):
         return headers
     
     def get(self, url, timeout=10, **params):
-        with httpx.Client(app=self.app, base_url=self.server_url) as client:
+        with httpx.Client(app=self.app, base_url=self.api_root) as client:
             resp = client.get(url, params=params, headers=self.headers(), timeout=timeout)
             if resp.is_error:
                 self.log_error(resp)
@@ -45,7 +45,7 @@ class EveApiClient(EveModelBase):
                 return resp.json()
             
     def post(self, url, data="", json={}, timeout=10):
-        with httpx.Client(app=self.app, base_url=self.server_url) as client:
+        with httpx.Client(app=self.app, base_url=self.api_root) as client:
             resp = client.post(url, data=data, json=json, headers=self.headers(), timeout=timeout)
             if resp.is_error:
                 self.log_error(resp)
@@ -54,7 +54,7 @@ class EveApiClient(EveModelBase):
                 return True
     
     def put(self, url, data, timeout=10):
-        with httpx.Client(app=self.app, base_url=self.server_url) as client:
+        with httpx.Client(app=self.app, base_url=self.api_root) as client:
             resp = client.post(url, data=data, headers=self.headers(), timeout=timeout)
             if resp.is_error:
                 self.log_error(resp)
@@ -97,9 +97,9 @@ class EveApiClient(EveModelBase):
             return {"_id": item_id,}
             
     def panel(self):
-        settings = pn.Param(self.param, parameters=["server_url","_log"], width=500, height=150, show_name=False,
+        settings = pn.Param(self.param, parameters=["api_root","_log"], width=500, height=150, show_name=False,
                         widgets={"_log": {'type': pn.widgets.TextAreaInput, 'disabled': True, "height":150},})
         return pn.Column(self.auth.panel, settings)
-        
+
 def default_client():
     return EveApiClient()

@@ -41,9 +41,6 @@ sphinx = "*"
 tox = "*"
 yapf = "*"
 
-[tool.poetry.scripts]
-eve_panel = 'eve_panel.cli:main'
-
 [tool.dephell.main]
 from = {format = "poetrylock", path = "poetry.lock"}
 to = {format = "setuppy", path = "setup.py"}

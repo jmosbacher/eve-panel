@@ -15,8 +15,35 @@ Eve-Panel
 
 
 
+Dynamically create an httpx based client for any Eve api that uses Param for type enforcement and Panel for GUIs.
+This is just a prototype package,features will slowly be added as i need them for my own purposes.
+The api is expected to change without warning based on my needs but feel free to fork or copy parts and adapt to your own needs.
 
-Dynamically create an httpx based client for any Eve api that uses Param for type enforcement and Panel for GUIs
+.. code-block:: python
+import eve
+from eve_panel import EveApiClient, EveDomain
+
+app = eve.Eve()
+
+client = eve_panel.EveApiClient.from_app_config(app.config, address="http://localhost:5000")
+client.auth.token = "my-secret-token"
+
+api = eve_panel.EveDomain.from_domain_def("my_api_name", app.config["DOMAIN"], client=client)
+
+# show a resources gui
+api.resource_name 
+
+# get a specific item
+api.resource_name["item_id"]
+
+# get current page data
+api.resource_name.current_page()
+
+# get next page data
+api.resource_name.next_page()
+
+# get previous page data
+api.resource_name.previous_page()
 
 
 * Free software: MIT
