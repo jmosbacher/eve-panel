@@ -19,6 +19,7 @@ Dynamically create an httpx based client for any Eve api that uses Param for typ
 This is just a prototype package,features will slowly be added as i need them for my own purposes.
 The api is expected to change without warning based on my needs but feel free to fork or copy parts and adapt to your own needs.
 
+To view the widgets in a notebook you will need to install the pyviz plugin. For details, see panel docs.
 .. code-block:: python
 
         import eve

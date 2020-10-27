@@ -1,12 +1,7 @@
-from collections import defaultdict
 
-def sort_by_url(domain):
-    sub_urls = {}
-    sub_resources = {}
+from .client import EveApiClient
+from .domain import EveDomain
 
-    for url, resource_def in domain.items():
-        sub_url, _, rest = url.partition("/")
-        if rest:
-            sub_urls[rest] = resource_def
-        else:
-            sub_resources[url] = resource_def
+def from_app_config(name, config, address="http://localhost:5000"):
+    client = EveApiClient.from_app_config(config, address=address)
+    return EveDomain.from_domain_def(name, config["DOMAIN"], client=client)
