@@ -1,21 +1,20 @@
 import param
 import panel as pn
+from . import settings
 
 
 class DefaultLayout(pn.GridBox):
-    ncols = 2
-    margin=15
-    width = 600
-    sizing_mode = "stretch_width"
+    ncols = param.Integer(max(1, int(settings.GUI_WIDTH/200)))
+    width = param.Integer(settings.GUI_WIDTH)
     
 class EveModelBase(param.Parameterized):
-    _panel = param.ClassSelector(pn.viewable.Viewable, default=None)
+    _panel = param.ClassSelector(pn.viewable.Viewable, default=None, precedence=-1)
 
     def make_panel(self):
         parameters = [k for k,v in self.params().items() if not k.startswith("_")]
-        panel = pn.Param(self.param, width=600,
+        panel = pn.Param(self.param, width=settings.GUI_WIDTH,
                                    parameters=parameters,
-                                   default_layout=DefaultLayout)
+                                   default_layout=pn.Card)
         return panel
 
     def panel(self):
@@ -27,7 +26,13 @@ class EveModelBase(param.Parameterized):
     def _repr_mimebundle_(self, include=None, exclude=None):
         mimebundle = self.panel()._repr_mimebundle_(include, exclude)
         return mimebundle
+
     @property
     def gui(self):
         return self.panel()
     
+    def show(self):
+        return self.panel().show()
+
+    def servable(self):
+        return self.panel().servable()

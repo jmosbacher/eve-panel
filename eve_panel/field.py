@@ -2,7 +2,7 @@
 import param
 from eve.io.mongo.validation import Validator
 
-SUPPORTED_SCHEMA_FIELDS = ["type","schema", "required", "readonly", "valueschema", "keyschema", "regex", 
+SUPPORTED_SCHEMA_FIELDS = ["type", "schema", "required", "readonly", "valueschema", "keyschema", "regex", 
 "minlength", "maxlength", "min", "max", "allowed","items", "empty", "nullable",
 ]
 

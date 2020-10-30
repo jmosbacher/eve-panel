@@ -14,6 +14,10 @@ class EveAuthBase(param.Parameterized):
 
     def panel(self):
         return pn.Column()
+    
+    def set_token(self, token):
+        self.token = token
+
 
 class EveBasicAuth(EveAuthBase):
     username = param.String(precedence=1)

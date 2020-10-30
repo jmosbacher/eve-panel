@@ -7,7 +7,7 @@ from io import StringIO, BytesIO
 
 from .eve_model import EveModelBase
 from .item import EveItem
-from .client import EveApiClient, default_client
+from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from . import settings
 
 
@@ -45,7 +45,11 @@ class EvePage(EveModelBase):
                
     def to_records(self):
         return [item.to_dict() for item in self.values()]
-    
+
+    def records(self):
+        for item in self.values():
+            yield item.to_dict()
+
     def to_dataframe(self):
         df = pd.DataFrame(self.to_records(), columns=self._columns)
         if "_id" in df.columns:
@@ -68,13 +72,9 @@ class EvePage(EveModelBase):
     def widgets_view(self):
         if not len(self._items):
             return pn.Column("## No items to display.")
-        n = settings.WIDGET_VIEW_ITEMS
-        items = [item.panel() for item in self._items.values()]
-        sub_pages = [items[i*n:(i+1)*n] for i in range(len(items)//n+1)]
-        tabs = [(str(i),pn.GridBox(*sub_page,
-                        height=int(settings.GUI_HEIGHT-10),
-                        width=settings.GUI_WIDTH, ncols=max(1, int(settings.GUI_WIDTH/300)))) for i,sub_page in enumerate(sub_pages)]
-        view = pn.Tabs(*tabs, dynamic=True)
+        
+        items = [(item.name, item.panel()) for item in self._items.values()]
+        view = pn.Tabs(*items, dynamic=True, height=int(settings.GUI_HEIGHT-10), width=settings.GUI_WIDTH)
         return view
 
     @param.depends("_items")
@@ -152,10 +152,6 @@ class EvePageCache(param.Parameterized):
 
     def get(self, key, fallback=None):
         return self._pages.get(key, fallback)
-        # if key in self._pages:
-        #     return self._pages[key]
-        # else:
-        #     return fallback
 
     def keys(self):
         yield from self._pages.keys()

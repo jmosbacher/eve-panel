@@ -5,12 +5,12 @@ import pandas as pd
 import json
 import yaml
 import itertools
-from eve.io.mongo.validation import Validator
+from .field import SUPPORTED_SCHEMA_FIELDS, Validator
 from io import StringIO, BytesIO
 
 from .eve_model import EveModelBase
 from .item import EveItem
-from .client import EveApiClient, default_client
+from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from .page import EvePage, EvePageCache, PageZero
 from . import settings
 
@@ -35,16 +35,12 @@ def read_file(fname, f):
             return [data]
     return []
 
-def items_to_dataframe(items):
-    return pd.DataFrame([item.to_dict() for item in items])
-
-
 class EveResource(EveModelBase):
-    _client = param.ClassSelector(EveApiClient, precedence=-1)
+    _http_client = param.ClassSelector(EveHttpClient, precedence=-1)
     _url = param.String(precedence=-1)
-    _page_view_format = param.Selector(objects=["Table", "Widgets", "JSON"], default="Table",
+    _page_view_format = param.Selector(objects=["Table", "Widgets", "JSON"], default=settings.DEFAULT_VIEW_FORMAT,
                                          label="Display Format", precedence=1)
-    _error_log = param.String("", precedence=1)
+    upload_errors = param.List(default=[])
     _resource = param.Dict(default={}, constant=True, precedence=-1)
     _schema = param.Dict(default={}, constant=True, precedence=-1)
 
@@ -57,7 +53,6 @@ class EveResource(EveModelBase):
     
     filters = param.Dict(default={}, doc="Filters")
     columns = param.List(default=[], precedence=1)
-    # projection = param.Dict(default={}, doc="Projections")
 
     items_per_page = param.Integer(default=10, label="Items per page", precedence=1)
     _prev_page_button = param.Action(lambda self: self.decrement_page(), label="<<", precedence=1)
@@ -65,16 +60,17 @@ class EveResource(EveModelBase):
     _next_page_button = param.Action(lambda self: self.increment_page(), label=">>", precedence=3)
     
     @classmethod
-    def from_resource_def(cls, resource_name, resource_def, client=None, items=[]):
+    def from_resource_def(cls, resource_def, resource_name, http_client=None, items=[]):
         resource = dict(resource_def)
         schema = resource.pop("schema")
-        client = client or default_client()
-        item = EveItem.from_schema(resource["item_title"], schema, resource["url"] , client=client)
+        if http_client is None:
+            http_client = DEFAULT_HTTP_CLIENT()
+        item = EveItem.from_schema(resource["item_title"], schema, resource["url"] , http_client=http_client)
         item_class = item.__class__
         params = dict(
             name = resource["resource_title"],
             _url = resource["url"],
-            _client = client,
+            _http_client = http_client,
             _item_class = item_class,
             _resource = resource,
             _schema = schema,
@@ -85,14 +81,17 @@ class EveResource(EveModelBase):
     def __getitem__(self, key):
         if key in self._cache:
             return self._cache[key]
-        data = self._client.get("/".join([self._url, key]))
+        data = self._http_client.get("/".join([self._url, key]))
         if data:
-            item = self._item_class(**data)
+            item = self.make_item(**data)
             return item
         raise KeyError
     
     def __setitem__(self, key, value):
         self._cache[key] = value
+
+    def make_item(self, **kwargs):
+        return self._item_class(**kwargs, _http_client=self._http_client)
 
     @param.depends("_upload_buffer")
     def upload_view(self):
@@ -108,7 +107,7 @@ class EveResource(EveModelBase):
         upload_file_button.on_click(lambda event: self._read_file_buffer())
 
         upload_preview = pn.pane.JSON(self._upload_buffer, name='Upload Buffer',
-                                    height=int(settings.GUI_HEIGHT-50),
+                                    height=int(settings.GUI_HEIGHT/2),
                                     width=int(settings.GUI_WIDTH), theme="light")
         upload_button = pn.widgets.Button(name="Insert to DB", button_type="success", 
                                             width=int(settings.GUI_WIDTH/4))
@@ -117,12 +116,11 @@ class EveResource(EveModelBase):
                                                      width=int(settings.GUI_WIDTH/4))
         read_clipboard_button.on_click(lambda event: self.read_clipboard())
 
-        first_row_buttons = pn.Row(upload_file, upload_file_button,read_clipboard_button)
+        first_row_buttons = pn.Row(upload_file,read_clipboard_button)
         second_row_buttons = pn.Row(clear_button, upload_button)
         input_buttons = pn.Column(first_row_buttons, second_row_buttons)
-        error_log = pn.Param(self.param._error_log, width=settings.GUI_WIDTH, height=160,
-                        widgets={"_error_log": {"type": pn.widgets.TextAreaInput, "disabled":True, "height":150}})
-        upload_view = pn.Column(input_buttons, upload_preview, error_log)
+   
+        upload_view = pn.Column(input_buttons, self.upload_errors, "### Upload buffer" ,upload_preview)
         return upload_view
 
     @param.depends("page_number", "_cache", "_page_view_format")
@@ -131,37 +129,40 @@ class EveResource(EveModelBase):
         if page is None:
             return pn.panel(f"## No data for page {self.page_number}.")
         return getattr(page, self._page_view_format.lower()+"_view", page.panel)()
-       
-    def make_panel(self, client=True, tabs_location='above'):
-        # if self._panel is not None:
-        #     return self._panel
+    
+    @param.depends("upload_errors")
+    def upload_errors_view(self):
+        alerts = [pn.pane.Alert(err, alert_type="danger") for err in self.upload_errors]
+        return pn.Column(*alerts, height=50, width=int(settings.GUI_WIDTH-30))
+
+    def make_panel(self, show_client=True, tabs_location='above'):
         buttons = pn.Param(self.param, parameters=["_prev_page_button", "page_number", "_next_page_button"],
                              default_layout=pn.Row, name="", width=int(settings.GUI_WIDTH/3))
-        # column_select = pn.widgets.MultiChoice(name="Columns", value=list(self._schema),
-        #                      options=list(self._schema), width=int(settings.GUI_WIDTH))
-        # column_select.link(self, value="columns")
+
         column_select = pn.Param(self.param.columns, width=int(settings.GUI_WIDTH-30), 
                                  widgets={"columns": {"type": pn.widgets.MultiChoice,
-                                                    "options": list(self._schema),
+                                                    "options": list(self._schema)+settings.META_COLUMNS,
                                                     "width": int(settings.GUI_WIDTH-30)}})
 
-        page_settings = pn.Column(pn.Row(self.param.items_per_page, self.param.filters, self.param._page_view_format,
-                                             width=int(settings.GUI_WIDTH-50)),
-                                     column_select,
-                                      width=int(settings.GUI_WIDTH-10))
-        if client:
-            page_settings.append("## API client")
+        page_settings = pn.Column(pn.Row(self.param.items_per_page, self.param.filters,
+                                         self.param._page_view_format,
+                                        width=int(settings.GUI_WIDTH-50)),
+                                column_select,
+                                width=int(settings.GUI_WIDTH-10))
+        if show_client:
+            page_settings.append("### HTTP client")
             page_settings.append(pn.layout.Divider())
-            page_settings.append(self._client.panel)
+            page_settings.append(self._http_client.panel)
         
         header = pn.Row(f"## {self.name} resource",
             pn.Spacer(sizing_mode='stretch_both'),
             buttons,
             pn.Spacer(sizing_mode='stretch_both'),
-            self._client.busy_indicator,)
+            self._http_client.busy_indicator,)
 
         view = pn.Column(
             header,
+            self._http_client.messages,
             pn.Tabs(("Data", self.current_page_view), 
                     ("Settings", page_settings),
                     ("Upload", self.upload_view),
@@ -174,21 +175,32 @@ class EveResource(EveModelBase):
     
     @property
     def projection(self):
-        return { k:1 for k in self.columns }
+        return { k:1 for k in self.columns if k not in settings.META_COLUMNS}
 
     def read_clipboard(self):
         from pandas.io.clipboard import clipboard_get
         try:
-            self._upload_buffer = json.loads(clipboard_get())
+            self._upload_buffer = self.filter_docs(json.loads(clipboard_get()))
         except Exception as e:
             print(e)
+
+    def read_file(self, fname, f=None):
+        if f is None:
+            f = open(f, "rb")
+        data = read_file(fname, f)
+        self._upload_buffer = self.filter_docs(data)
+        return data
 
     @param.depends("_file_buffer", watch=True)
     def _read_file_buffer(self):
         sio = BytesIO(self._file_buffer)
-        data = read_file(self._filename, sio)
-        self._upload_buffer = self._upload_buffer + data
-        
+        self.read_file(self._filename, sio)
+
+    def filter_docs(self, docs):
+        if isinstance(docs, dict):
+            docs = [docs]
+        return [{k:v for k,v in doc.items() if k in self._schema} for doc in docs]
+
     @property
     def gui(self):
         return self.panel()
@@ -198,29 +210,29 @@ class EveResource(EveModelBase):
         return self.to_dataframe()
 
     def keys(self):
-        for i in itertools.count():
-            idx = i+1
-            items = self.find(projection={"_id":1}, max_results=5000, page=idx)
-            if not items:
-                break
-            for item in items:
-                yield item._id
+        for page in self.pages():
+            yield from page.keys()
 
     def values(self):
-        for i in itertools.count():
-            idx = i+1
-            page = self.get_page(idx)
-            if not len(page):
-                break
+        for page in self.pages():
             yield from page.values()
 
     def items(self):
-        for i in itertools.count():
-            idx = i+1
+        for page in self.pages():
+            yield from page.items()
+
+    def records(self):
+        for page in self.pages():
+            yield from page.records()
+
+    def pages(self, start=1, end=None):
+        for idx in itertools.count(start):
+            if end is not None and idx>end:
+                break
             page = self.get_page(idx)
             if not len(page):
                 break
-            yield from page.items()
+            yield page
 
     def new_item(self, data={}):
         item = self.item_class(**data)
@@ -230,15 +242,16 @@ class EveResource(EveModelBase):
         return [item.to_dict() for item in self.values()]
     
     def to_dataframe(self):
-        data = list(self.values())
-        df = pd.concat([page.to_dataframe() for page in self.values])
+        df = pd.concat([page.to_dataframe() for page in self.values()])
         if "_id" in df.columns:
             df = df.set_index("_id")
         return df
-    
-    def pull(self):
-        for i in itertools.count():
-            idx = i+1
+
+
+    def pull(self, start=1, end=None):
+        for idx in itertools.count(start):
+            if end is not None and idx>end:
+                break
             if not self.pull_page(idx):
                 break
             
@@ -248,38 +261,56 @@ class EveResource(EveModelBase):
         for idx in idxs:
             self._cache[idx].push()
 
-    def find(self, query={}, projection={}, max_results=25, page=1):
-        resp = self._client.get(self._url, where=json.dumps(query),
-                 projection=json.dumps(projection), max_results=max_results, page=page)
-        if not resp or "_items" not in resp:
-            return []
-        items = [self._item_class(**doc) for doc in resp["_items"]]
-        return items
-    
-    def find_df(self, query={}, projection={}, max_results=25, page=1):
-        items = [item.to_dict() for item in self.find(query, projection, max_results=max_results, page=page)]
-        df = pd.DataFrame(items)
+    def find(self, query={}, projection={}, max_results=25, page_number=1):
+        resp = self._http_client.get(self._url, where=json.dumps(query),
+                 projection=json.dumps(projection), max_results=max_results, page=page_number)
+        docs = []
+        if resp and "_items" in resp:
+            docs = resp["_items"]
+        return docs
+        
+
+    def find_page(self, query={}, projection={}, max_results=25, page_number=1):
+        docs = self.find(query=query, projection=projection,
+                         max_results=max_results, page_number=page_number)
+        items = [self.make_item(**doc) for doc in docs]
+        page = EvePage(name=f'{self._url.replace("/", ".")} page {page_number}',
+                                    _items={item._id:item for item in items},
+                                    _columns=self.columns)
+        return page
+
+    def find_df(self, query={}, projection={}, max_results=25, page_number=1):
+        page = self.find_page(query=query, projection=projection,
+                             max_results=max_results, page_number=page_number)
+        df = page.to_dataframe()
         if "_id" in df.columns:
             df = df.set_index("_id")
         return df
 
-    def post(self, docs):
-        return self._cleint.post(self._url, json=docs)
+    def find_one(self, query={}, projection={}):
+        docs = self.find(query=query, projection=projection)
+        if docs:
+            return docs[0]
 
-    def add_data(self, data):
-        if isinstance(data, dict):
-            data = [data]
-        docs = []
-        for doc in data:
-            if isinstance(doc, dict):
-                docs.append(doc)
-            elif isinstance(doc, EveItem):
-                docs.append(doc.to_dict())
-        valid = _validate_docs(docs)
-        self._upload_buffer = self._upload_buffer + docs
+    def find_one_item(self, query={}, projection={}):
+        doc = self.find_one(query=query, projection=projection)
+        if doc:
+            return self.make_item(**doc)
 
-    def _validate_docs(self, docs):
-        v = Validator(self._schema)
+    def post(self, docs, validate=True):
+        if validate:
+            docs, rejected, errors = self.validate_documents(docs)
+            if errors:
+                return errors
+        return self._client.post(self._url, json=docs)
+
+    def insert_documents(self, docs):
+        return self.post(docs)
+
+    def validate_documents(self, docs):
+        schema = {name: {k:v for k,v in field.items() if k in SUPPORTED_SCHEMA_FIELDS} 
+                        for name, field in self._schema.items()}
+        v = Validator(schema)
         valid = []
         rejected = []
         errors = []
@@ -295,22 +326,21 @@ class EveResource(EveModelBase):
         self._upload_buffer = []
 
     def flush_buffer(self):
-        valid, rejected, errors = self._validate_docs(self._upload_buffer)
+        valid, rejected, errors = self.validate_documents(self._upload_buffer)
         if valid:
-            self._client.post(self._url, valid)
+            self._http_client.post(self._url, data=json.dumps(valid))
         self._upload_buffer = rejected
-        self._error_log = "/n".join([str(err) for err in errors])
+        self.upload_errors = [str(err) for err in errors]
+        return valid
 
     def pull_page(self, idx=0):
         if not idx:
-            self._cache[idx] = PageZero() #EvePage(name=f'{self._url.replace("/", ".")} page 0',_columns=self.columns)
+            self._cache[idx] = PageZero()
             return False
-        items = self.find(query=self.filters, projection=self.projection, 
-                            max_results=self.items_per_page, page=idx)
-        if items:
-            self._cache[idx] = EvePage(name=f'{self._url.replace("/", ".")} page {idx}',
-                                    _items={item._id:item for item in items},
-                                    _columns=self.columns)
+        page = self.find_page(query=self.filters, projection=self.projection, 
+                            max_results=self.items_per_page, page_number=idx)
+        if page._items:
+            self._cache[idx] = page
             return True
         return False
 
@@ -322,7 +352,6 @@ class EveResource(EveModelBase):
     def get_page(self, idx):
         if idx not in self._cache or not len(self._cache[idx]):
             self.pull_page(idx)
-            # EvePage(_columns=self.columns)
         return self._cache.get(idx, EvePage(name="Place holder", _columns=self.columns))
 
     def get_page_records(self, idx):
@@ -338,7 +367,6 @@ class EveResource(EveModelBase):
     def increment_page(self):
         self.page_number = self.page_number + 1
 
-        
     def next_page(self):
         self.increment_page()
         return self.current_page()
@@ -360,4 +388,3 @@ class EveResource(EveModelBase):
     @param.depends("items_per_page", "filters", "columns", watch=True)
     def _query_settings_changed(self):
         self._cache = EvePageCache()
-        

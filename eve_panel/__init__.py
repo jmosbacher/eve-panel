@@ -1,5 +1,5 @@
 """Top-level package for Eve-Panel."""
-from .client import EveApiClient
+from .eve_client import EveClient
 from .domain import EveDomain
 from .resource import EveResource
 from .item import EveItem
