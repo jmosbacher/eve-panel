@@ -80,9 +80,12 @@ class EveHttpxClient(EveHttpClient):
                 self.log_error(e)
             self._busy = False
 
-    def put(self, url, data, timeout=10):
+    def put(self, url, data, etag=None, timeout=10):
         with httpx.Client(app=self.app, base_url=self.server_url) as client:
             self._busy = True
+            headers = self.headers()
+            if etag:
+                headers["If-Match"] = etag
             try:
                 resp = client.put(url, data=data, headers=self.headers(), timeout=timeout)
                 self._busy = False
@@ -96,11 +99,14 @@ class EveHttpxClient(EveHttpClient):
                 self.log_error(e)
         self._busy = False
 
-    def patch(self, url, data, timeout=10):
+    def patch(self, url, data, etag=None,  timeout=10):
         with httpx.Client(app=self.app, base_url=self.server_url) as client:
             self._busy = True
+            headers = self.headers()
+            if etag:
+                headers["If-Match"] = etag
             try:
-                resp = client.patch(url, data=data, headers=self.headers(), timeout=timeout)
+                resp = client.patch(url, data=data, headers=headers, timeout=timeout)
                 self._busy = False
                 if resp.is_error:
                     self.log_error(resp.text)
@@ -119,7 +125,7 @@ class EveHttpxClient(EveHttpClient):
             if etag:
                 headers["If-Match"] = etag
             try:
-                resp = client.post(url,headers=headers, timeout=timeout)
+                resp = client.delete(url, headers=headers, timeout=timeout)
                 self._busy = False
                 if resp.is_error:
                     self.log_error(resp.text)
