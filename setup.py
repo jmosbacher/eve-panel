@@ -14,7 +14,7 @@ readme = ''
 setup(
     long_description=readme,
     name='eve_panel',
-    version='0.1.0',
+    version='0.3.0',
     description='Top-level package for Eve-Panel.',
     python_requires='>=3.7',
     author='Yossi Mosbacher',
