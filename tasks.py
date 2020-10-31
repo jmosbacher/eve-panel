@@ -176,3 +176,7 @@ def release(c):
     Make a release of the python package to pypi
     """
     _run(c, "poetry publish")
+
+@task(help={'version': "major/minor/path or explicit version"})
+def bump(c, version="patch"):
+    _run(c, "bump2version {}".format(version))
