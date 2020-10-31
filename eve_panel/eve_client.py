@@ -1,13 +1,23 @@
-import param
-import panel as pn
-import eve
-from .http_client import EveHttpClient, DEFAULT_HTTP_CLIENT
-from .eve_model import EveModelBase
-from .domain import EveDomain
+"""
+Eve client
+====================================
+Client for single or multiple Eve APIs.
+"""
+
 from pprint import pprint
 
+import eve
+import panel as pn
+import param
+
+from .domain import EveDomain
+from .eve_model import EveModelBase
+from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
+
+
 class EveClient(EveModelBase):
-    _http_client = param.ClassSelector(EveHttpClient, default=DEFAULT_HTTP_CLIENT())
+    _http_client = param.ClassSelector(EveHttpClient,
+                                       default=DEFAULT_HTTP_CLIENT())
     domain = param.ClassSelector(EveDomain)
 
     @classmethod
@@ -15,14 +25,17 @@ class EveClient(EveModelBase):
         settings = app.config
         # pprint(settings["DOMAIN"])
         http_client = DEFAULT_HTTP_CLIENT.from_app_settings(dict(settings))
-        domain=EveDomain.from_domain_def(domain_def=settings["DOMAIN"], domain_name=name, http_client=http_client, sort_by_url=sort_by_url)
+        domain = EveDomain.from_domain_def(domain_def=settings["DOMAIN"],
+                                           domain_name=name,
+                                           http_client=http_client,
+                                           sort_by_url=sort_by_url)
         return cls(domain=domain, _http_client=http_client)
 
     @classmethod
     def from_app_settings(cls, settings, sort_by_url=False):
         app = eve.Eve(settings=settings)
         return cls.from_app(app, sort_by_url=sort_by_url)
-        
+
     @property
     def db(self):
         return self.domain

@@ -1,14 +1,13 @@
+from io import BytesIO, StringIO
 
-import param
-import panel as pn
 import pandas as pd
+import panel as pn
+import param
 
-from io import StringIO, BytesIO
-
-from .eve_model import EveModelBase
-from .item import EveItem
-from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from . import settings
+from .eve_model import EveModelBase
+from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
+from .item import EveItem
 
 
 class EvePage(EveModelBase):
@@ -23,26 +22,26 @@ class EvePage(EveModelBase):
 
     def __contains__(self, key):
         return key in self._items
-    
+
     def __len__(self):
         return len(self._items)
-    
+
     def __bool__(self):
         return bool(len(self))
-    
+
     @property
     def df(self):
         return self.to_dataframe()
-    
+
     def keys(self):
         yield from self._items.keys()
-    
+
     def values(self):
         yield from self._items.values()
 
     def items(self):
         yield from self._items.items()
-               
+
     def to_records(self):
         return [item.to_dict() for item in self.values()]
 
@@ -55,13 +54,13 @@ class EvePage(EveModelBase):
         if "_id" in df.columns:
             df = df.set_index("_id")
         return df
-    
+
     def push(self, names=None):
         if names is None:
             names = self.keys()
         for name in names:
             self._items[name].push()
-    
+
     def pull(self, names=None, version=1):
         if names is None:
             names = self.keys()
@@ -72,9 +71,12 @@ class EvePage(EveModelBase):
     def widgets_view(self):
         if not len(self._items):
             return pn.Column("## No items to display.")
-        
+
         items = [(item.name, item.panel()) for item in self._items.values()]
-        view = pn.Tabs(*items, dynamic=True, height=int(settings.GUI_HEIGHT-10), width=settings.GUI_WIDTH)
+        view = pn.Tabs(*items,
+                       dynamic=True,
+                       height=int(settings.GUI_HEIGHT - 10),
+                       width=settings.GUI_WIDTH)
         return view
 
     @param.depends("_items")
@@ -82,21 +84,25 @@ class EvePage(EveModelBase):
         if not len(self._items):
             return pn.Column("## No items to display.")
         df = self.to_dataframe()
-        return pn.widgets.DataFrame(df, disabled=True, width=settings.GUI_WIDTH,
-                                        height=int(settings.GUI_HEIGHT-30))
+        return pn.widgets.DataFrame(df,
+                                    disabled=True,
+                                    width=settings.GUI_WIDTH,
+                                    height=int(settings.GUI_HEIGHT - 30))
 
     @param.depends("_items")
     def json_view(self):
-        return pn.pane.JSON(self.to_records(), theme="light",
-            width=settings.GUI_WIDTH, height=int(settings.GUI_HEIGHT-30))
+        return pn.pane.JSON(self.to_records(),
+                            theme="light",
+                            width=settings.GUI_WIDTH,
+                            height=int(settings.GUI_HEIGHT - 30))
 
     def panel(self):
-        tabs = pn.Tabs(("Table", self.table_view), 
-                        ("Widgets", self.widgets_view), 
-                        ("JSON", self.json_view),
-                        height=int(settings.GUI_HEIGHT),
-                        width=settings.GUI_WIDTH,
-                        dynamic=True)
+        tabs = pn.Tabs(("Table", self.table_view),
+                       ("Widgets", self.widgets_view),
+                       ("JSON", self.json_view),
+                       height=int(settings.GUI_HEIGHT),
+                       width=settings.GUI_WIDTH,
+                       dynamic=True)
         return pn.Column(f"## {self.name}", tabs)
 
 
@@ -115,15 +121,16 @@ class PageZero(EvePage):
 
     def panel(self):
         return pn.Column(
-                pn.layout.Divider(width=settings.GUI_WIDTH),
-                "### You are on the landing page for this resource, no data here.",
-                "TIP 1: Use the >> button to load the first page.",
-                "TIP 2: You can use the settings tab to change what data is loaded and how it is displayed.",
-                "TIP 3: If you just want to upload data, you can go directly to the upload tab. ",
-                pn.layout.Divider(width=settings.GUI_WIDTH),
-                width=settings.GUI_WIDTH,
-                height=300,
-                )
+            pn.layout.Divider(width=settings.GUI_WIDTH),
+            "### You are on the landing page for this resource, no data here.",
+            "TIP 1: Use the >> button to load the first page.",
+            "TIP 2: You can use the settings tab to change what data is loaded and how it is displayed.",
+            "TIP 3: If you just want to upload data, you can go directly to the upload tab. ",
+            pn.layout.Divider(width=settings.GUI_WIDTH),
+            width=settings.GUI_WIDTH,
+            height=300,
+        )
+
 
 class EvePageCache(param.Parameterized):
     _pages = param.Dict(default={})

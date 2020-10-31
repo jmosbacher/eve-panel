@@ -107,6 +107,7 @@ def docs(c, launch=True):
     """
     Generate documentation
     """
+    _run(c, "sphinx-apidoc {} -o {}".format(SOURCE_DIR, DOCS_DIR))
     _run(c, "sphinx-build -b html {} {}".format(DOCS_DIR, DOCS_BUILD_DIR))
     if launch:
         webbrowser.open(DOCS_INDEX.as_uri())

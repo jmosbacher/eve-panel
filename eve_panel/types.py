@@ -1,6 +1,7 @@
 import param
 from bson import objectid
 
+
 class CoerceClassSelector(param.ClassSelector):
     def __set__(self, obj, val):
         try:
@@ -8,15 +9,19 @@ class CoerceClassSelector(param.ClassSelector):
         except:
             pass
         super().__set__(obj, val)
-        
+
+
 def objectid_param(**kwargs):
     return CoerceClassSelector(str, constant=True, **kwargs)
+
 
 def bytes_param(**kwargs):
     return param.ClassSelector(bytes, **kwargs)
 
+
 def set_param(**kwargs):
     return param.ClassSelector(set, **kwargs)
+
 
 TYPE_MAPPING = {
     "objectid": objectid_param,
