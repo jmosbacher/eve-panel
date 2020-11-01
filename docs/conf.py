@@ -127,7 +127,7 @@ html_theme_options = {
 
     # Specify a base_url used to generate sitemap.xml. If not
     # specified, then no sitemap will be built.
-    'base_url': 'https://project.github.io/jmosbacher',
+    'base_url': 'https://jmosbacher.github.io/',
 
     # Set the color and the accent color
     'color_primary': 'cyan',
