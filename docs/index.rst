@@ -8,6 +8,7 @@ Welcome to Eve-Panel's documentation!
    readme
    installation
    usage
+   gui
    modules
    contributing
    authors

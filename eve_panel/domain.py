@@ -68,6 +68,7 @@ class EveDomain(EveModelBase):
         return instance
 
     def make_panel(self, show_client=True, tabs_location='above'):
+    
         tabs = [
             (k.upper().replace("_", " "),
              getattr(self, k).make_panel(show_client=False,
@@ -77,9 +78,9 @@ class EveDomain(EveModelBase):
                                                                    EveResource)
         ]
         tabs.sort(key=lambda x: len(x[0]))
-        view = pn.Tabs(*tabs, dynamic=True, tabs_location=tabs_location)
         if show_client:
-            view.append(("Settings", self._http_client.panel))
+            tabs = [("Config", self._http_client.panel)] + tabs
+        view = pn.Tabs(*tabs, dynamic=True, tabs_location=tabs_location)
 
         return view
 

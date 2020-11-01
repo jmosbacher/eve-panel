@@ -1,3 +1,9 @@
+"""
+Eve model
+==========
+Base classes for objects that represent Eve models.
+"""
+
 import panel as pn
 import param
 
@@ -43,3 +49,8 @@ class EveModelBase(param.Parameterized):
 
     def servable(self):
         return self.panel().servable()
+
+    def clone(self, **kwargs):
+        params = dict(self.param.get_param_values())
+        params.update(kwargs)
+        return self.__class__(**params)

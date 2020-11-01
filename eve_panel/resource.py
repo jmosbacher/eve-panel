@@ -66,16 +66,20 @@ class EveResource(EveModelBase):
                                    label="Items per page",
                                    precedence=1)
     _prev_page_button = param.Action(lambda self: self.decrement_page(),
-                                     label="<<",
+                                     label="\u23EA",
                                      precedence=1)
     page_number = param.Integer(default=0,
                                 bounds=(0, None),
                                 label="",
                                 doc="Page number",
                                 precedence=2)
-    _next_page_button = param.Action(lambda self: self.increment_page(),
-                                     label=">>",
+    _reload_page_button = param.Action(lambda self: self.reload_page(),
+                                     label="\u21BB",
                                      precedence=3)
+    _next_page_button = param.Action(lambda self: self.increment_page(),
+                                     label="\u23E9",
+                                     precedence=4)
+
 
     @classmethod
     def from_resource_def(cls,
@@ -121,7 +125,7 @@ class EveResource(EveModelBase):
         clear_button = pn.widgets.Button(name="Clear buffer",
                                          button_type="warning",
                                          width=int(settings.GUI_WIDTH / 4))
-        clear_button.on_click(lambda event: self.clear_buffer())
+        clear_button.on_click(lambda event: self.clear_upload_buffer())
 
         upload_file = pn.widgets.FileInput(accept=",".join(
             [f".{ext}" for ext in file_readers]),
@@ -178,7 +182,7 @@ class EveResource(EveModelBase):
         buttons = pn.Param(self.param,
                            parameters=[
                                "_prev_page_button", "page_number",
-                               "_next_page_button"
+                               "_reload_page_button", "_next_page_button"
                            ],
                            default_layout=pn.Row,
                            name="",
@@ -218,8 +222,8 @@ class EveResource(EveModelBase):
             header, self._http_client.messages,
             pn.Tabs(
                 ("Data", self.current_page_view),
-                ("Settings", page_settings),
                 ("Upload", self.upload_view),
+                ("Config", page_settings),
                 dynamic=True,
                 tabs_location=tabs_location,
                 width=int(settings.GUI_WIDTH),
@@ -392,7 +396,7 @@ class EveResource(EveModelBase):
                 errors.append(v.errors)
         return valid, rejected, errors
 
-    def clear_buffer(self):
+    def clear_upload_buffer(self):
         self._upload_buffer = []
 
     def flush_buffer(self):
@@ -465,3 +469,21 @@ class EveResource(EveModelBase):
                    watch=True)
     def clear_cache(self):
         self._cache = EvePageCache()
+
+    def reload_page(self, page_number=None):
+        if page_number is None:
+            page_number = self.page_number
+        self.pull_page(page_number)
+
+    def filter(self, **filters):
+        return self.clone(filters=filters)
+
+    def project(self, **projection):
+        value_sum = sum(list(projection.values()))
+        if value_sum==0:
+            columns = [c for c in self._schema if c not in projection]
+        elif value_sum==len(projection):
+            columns = list(projection)
+        else:
+            raise ValueError("Mongo projections can either be inclusive or exclusive but not both.")
+        return self.clone(columns=columns)

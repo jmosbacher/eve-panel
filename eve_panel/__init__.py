@@ -23,6 +23,7 @@ from .utils import from_app_config
 
 
 def notebook():
+    """ Load notebook support. """
     return pn.extension()
 
 

@@ -25,5 +25,5 @@ deploy:
     secure: PLEASE_REPLACE_ME
   on:
     tags: true
-    repo: jmosbacher/eve_panel
+    repo: jmosbacher/eve-panel
     python: 3.8

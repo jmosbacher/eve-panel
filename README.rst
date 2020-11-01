@@ -15,7 +15,7 @@ Eve-Panel
 
 
 
-Dynamically create an httpx based client for any Eve api that uses Param for type enforcement and Panel for GUIs.
+Dynamically create an httpx based client for any Eve api. Uses Param + Cerberus for type enforcement and Panel for GUIs.
 This is just a prototype package,features will slowly be added as i need them for my own purposes.
 The api is expected to change without warning based on my needs but feel free to fork or copy parts and adapt to your own needs.
 
@@ -24,14 +24,17 @@ To view the widgets in a notebook you will need to install the pyviz plugin. For
 Basic usage::
 
         import eve
-        from eve_panel import EveApiClient, EveDomain
+        from eve_panel import EveClient
+
 
         app = eve.Eve()
 
-        client = eve_panel.EveApiClient.from_app_config(app.config, address="http://localhost:5000")
-        client.auth.token = "my-secret-token"
+        client = eve_panel.EveClient.from_app(app)
+        
+        # optional
+        client.auth.set_token("my-secret-token")
 
-        api = eve_panel.EveDomain.from_domain_def("my_api_name", app.config["DOMAIN"], client=client)
+        api = client.db
 
         # show a resources gui
         api.resource_name 
@@ -39,13 +42,13 @@ Basic usage::
         # get a specific item
         api.resource_name["item_id"]
 
-        # get current page data
+        # get current page
         api.resource_name.current_page()
 
-        # get next page data
+        # get next page
         api.resource_name.next_page()
 
-        # get previous page data
+        # get previous page
         api.resource_name.previous_page()
 
 

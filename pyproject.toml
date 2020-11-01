@@ -41,6 +41,7 @@ tox = "*"
 yapf = "*"
 nbsphinx = "^0.8.0"
 sphinx-material = {git = "https://github.com/bashtage/sphinx-material.git"}
+numpydoc = "^1.1.0"
 
 [tool.dephell.main]
 from = {format = "poetrylock", path = "poetry.lock"}

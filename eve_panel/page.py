@@ -123,9 +123,9 @@ class PageZero(EvePage):
         return pn.Column(
             pn.layout.Divider(width=settings.GUI_WIDTH),
             "### You are on the landing page for this resource, no data here.",
-            "TIP 1: Use the >> button to load the first page.",
+            "TIP 1: Use the \u23E9 button to load the first page.",
             "TIP 2: You can use the settings tab to change what data is loaded and how it is displayed.",
-            "TIP 3: If you just want to upload data, you can go directly to the upload tab. ",
+            "TIP 3: If you just want to upload data, you can go directly to the upload tab.",
             pn.layout.Divider(width=settings.GUI_WIDTH),
             width=settings.GUI_WIDTH,
             height=300,

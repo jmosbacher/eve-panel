@@ -41,6 +41,13 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
+    "numpydoc",
+    "sphinx.ext.doctest",
+    "sphinx.ext.extlinks",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.todo",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.viewcode",
     'nbsphinx',
 ]
 
@@ -88,6 +95,9 @@ pygments_style = 'sphinx'
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
 
+autosummary_generate = True
+
+autoclass_content = "class"
 
 # -- Options for HTML output -------------------------------------------
 
@@ -120,12 +130,13 @@ html_theme_options = {
     'base_url': 'https://project.github.io/jmosbacher',
 
     # Set the color and the accent color
-    'color_primary': 'green',
+    'color_primary': 'cyan',
     'color_accent': 'light-green',
 
     # Set the repo location to get a badge with stats
-    'repo_url': 'https://github.com/jmosbacher/eve_panel/',
-    'repo_name': 'Project',
+    'repo_url': 'https://github.com/jmosbacher/eve-panel',
+    'repo_name': 'Eve Panel',
+    "repo_type": "github",
 
     # Visible levels of the global TOC; -1 means unlimited
     'globaltoc_depth': 3,
@@ -133,7 +144,14 @@ html_theme_options = {
     'globaltoc_collapse': False,
     # If True, show hidden TOC entries
     'globaltoc_includehidden': False,
-    
+    "logo_icon": "&#xe1db",
+    "nav_links": [
+        {
+            "href": "https://github.com/jmosbacher/xepmts",
+            "internal": False,
+            "title": "XEPMTS",
+        },
+    ],
 
 
 }

@@ -194,8 +194,13 @@ class EveHttpxClient(EveHttpClient):
             self._busy = False
 
     def log_error(self, e):
-        self._log = str(e)
-        self._messages = [str(e)]
+        try:
+            e = str(e)
+            log = [e] + self._log.split("\n")
+            self._log = "\n".join(log[:settings.MAX_LOG_SIZE])
+            self._messages = (e.split("\n")+self._messages)[:settings.MAX_MESSAGES]
+        except:
+            pass
 
     def clear_messages(self):
         self._messages = []
