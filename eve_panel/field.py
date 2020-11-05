@@ -5,6 +5,7 @@ SUPPORTED_SCHEMA_FIELDS = [
     "type",
     "schema",
     "required",
+    "default",
     "readonly",
     "valueschema",
     "keyschema",

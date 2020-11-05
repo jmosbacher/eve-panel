@@ -174,7 +174,7 @@ class EveHttpxClient(EveHttpClient):
                 self.log_error(e)
             self._busy = False
 
-    def delete(self, url, etag, timeout=10):
+    def delete(self, url, etag="", timeout=10):
         with httpx.Client(app=self.app, base_url=self.server_url) as client:
             self._busy = True
             headers = self.headers()

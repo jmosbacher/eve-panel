@@ -28,8 +28,14 @@ class EveItem(EveModelBase):
     _delete = param.Action(lambda self: self.delete(),
                            label="Delete",
                            precedence=16)
+    _delete_requested = param.Boolean(False, precedence=-1)
+    _deleted = param.Boolean(False, precedence=-1)
+    _verification = param.String("Enter item id here to enable deletion.", label="", precedence=1)
     _clone = param.Action(lambda self: self.clone(),
                           label="Clone",
+                          precedence=16)
+    _reload = param.Action(lambda self: self.pull(),
+                          label="Reload",
                           precedence=16)
 
     def __init__(self, **params):
@@ -83,13 +89,15 @@ class EveItem(EveModelBase):
                 continue
             if "default" in field_schema:
                 kwargs["default"] = field_schema["default"]
+            else:
+                kwargs["default"] = None
 
             widget = get_widget(extended_name, field_schema)
             if widget is not None:
                 _widgets[field_name] = widget
 
-            kwargs["allow_None"] = field_schema.get(
-                "nullable", False) or not field_schema.get("required", False)
+            if field_schema.get("required", False):
+                kwargs["allow_None"] = False
 
             bounds = (field_schema.get("min",
                                        None), field_schema.get("max", None))
@@ -108,34 +116,9 @@ class EveItem(EveModelBase):
                      _http_client=http_client,
                      **data)
 
-    def make_panel(self):
-        header = pn.Column(
-            pn.layout.Divider(),
-            f"### {self.name}",
-        )
-        buttons = pn.Param(self.param,
-                           parameters=["_save", "_delete"],
-                           widgets={
-                               "_delete": {
-                                   "type": pn.widgets.Button,
-                                   "button_type": "danger"
-                               },
-                               "_save": {
-                                   "type": pn.widgets.Button,
-                                   "button_type": "success"
-                               },
-                           },
-                           show_name=False,
-                           default_layout=pn.Row)
-
-        editors = pn.Param(self.param,
-                           show_name=False,
-                           default_layout=DefaultLayout,
-                           width=settings.GUI_WIDTH,
-                           widgets=self._widgets,
-                           parameters=list(self._schema) +
-                           settings.META_COLUMNS)
-        return pn.Column(header, editors, buttons)
+    @property
+    def url(self):
+        return "/".join([self._resource_url, self._id])
 
     def save(self):
         self.push()
@@ -146,11 +129,32 @@ class EveItem(EveModelBase):
     def to_dict(self):
         return self.to_record()
 
+    def keys(self):
+        yield from self.to_record().keys()
+
+    def values(self):
+        yield from self.to_record().values()
+
+    def items(self):
+        yield from self.to_record().items()
+
+    def __getitem__(self, key):
+        if key in self._schema:
+            return getattr(self, key)
+        else:
+            raise KeyError(f"{key} not found.")
+    
+    def __setitem__(self, key, value):
+        if key in self._schema:
+            setattr(self, key, value)
+        else:
+            raise KeyError(f"{key} cannot be set.")
+
     @param.depends("_version", watch=True)
     def pull(self):
         if self._version is None:
             return
-        data = self._http_client.get("/".join([self._resource_url, self._id]),
+        data = self._http_client.get(self.url,
                                      version=self._version)
         if not data:
             return
@@ -165,14 +169,13 @@ class EveItem(EveModelBase):
                 except Exception as e:
                     print(e)
                     pass
-
+    
     def version(self, version):
         self._version = version
-        # self.pull()
-        return self
+        return self.clone(_version=version)
 
     def versions(self):
-        data = self._http_client.get("/".join([self._resource_url, self._id]),
+        data = self._http_client.get(self.url,
                                      version='all')
         if not data:
             return []
@@ -184,7 +187,7 @@ class EveItem(EveModelBase):
         ]
 
     def version_diffs(self):
-        data = self._http_client.get("/".join([self._resource_url, self._id]),
+        data = self._http_client.get(self.url,
                                      version='diffs')
         if not data:
             return []
@@ -196,33 +199,98 @@ class EveItem(EveModelBase):
         ]
 
     def push(self):
-        url = "/".join([self._resource_url, self._id])
         data = {
             "_id": self._id,
         }
+        
         if self._version == self._latest_version:
-            data["_etag"] = self._etag
-
+            etag = self._etag
+        else:
+            etag = ""
         for k in self._schema:
             data[k] = getattr(self, k)
-        self._http_client.put(url, data)
+        self._http_client.put(self.url, data, etag=etag)
         self.pull()
 
     def patch(self, fields):
-        url = "/".join([self._resource_url, self._id])
-        data = {"_id": self._id, "_etag": self._etag}
+        if self._version == self._latest_version:
+            etag = self._etag
+        else:
+            etag = ""
+        data = {"_id": self._id}
         for k in fields:
             data[k] = getattr(self, k)
-        self._http_client.patch(url, data)
+        self._http_client.patch(self.url, data, etag=etag)
+
+
+    def delete(self, verification=None):
+        if verification is not None and verification != self._id:
+            print(verification)
+            return False
+        self._deleted = self._http_client.delete(self.url, etag=self._etag)
+        return self._deleted
 
     def clone(self):
         data = {k: getattr(self, k) for k in self._schema}
         return self.__class__(**data)
 
-    def delete(self):
-        url = "/".join([self._resource_url, self._id])
-        data = {"_id": self._id, "_etag": self._etag}
-        return self._http_client.delete(url, data)
+    @param.depends("_delete_requested")
+    def buttons(self):
+        param_buttons = pn.Param(self.param,
+                           parameters=["_reload", "_save"],
+                           widgets={
+                               "_reload": {
+                                   "type": pn.widgets.Button,
+                                   "button_type": "primary"
+                               },
+                               "_save": {
+                                   "type": pn.widgets.Button,
+                                   "button_type": "success"
+                               },
+                           },
+                           show_name=False,
+                           default_layout=pn.Row)
+
+        delete_button = pn.widgets.Button(name="Remove")
+        verification = pn.widgets.TextInput(placeholder="Enter item id here to enable deletion.")
+        row = pn.Row(param_buttons, verification, delete_button)
+        if self._deleted:
+            delete_button.name = "Deleted."
+            delete_button.disabled = True
+            row.pop(1)
+        elif self._delete_requested:
+            delete_button.name = "Delete"
+            delete_button.button_type = "danger"
+            def onclick(event):
+                delete_button.disabled = True
+                self.delete(verification=verification.value)
+                delete_button.disabled = False
+            delete_button.on_click(onclick)
+        else:
+            delete_button.disabled = False
+            delete_button.button_type = "warning"
+            def onclick(event):
+                self._delete_requested = True
+            delete_button.on_click(onclick)
+            row.pop(1)
+        return row
+
+    def make_panel(self):
+        header = pn.Column(
+            pn.layout.Divider(),
+            f"### {self.name}",
+        )
+        
+        # buttons = pn.Row(param_buttons, self.delete_button)
+    
+        editors = pn.Param(self.param,
+                           show_name=False,
+                           default_layout=DefaultLayout,
+                           width=settings.GUI_WIDTH,
+                           widgets=self._widgets,
+                           parameters=list(self._schema) +
+                           settings.META_COLUMNS)
+        return pn.Column(header, editors, self.buttons)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(_id={self._id or self.name})"

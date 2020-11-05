@@ -12,6 +12,11 @@ Todo:
    http://google.github.io/styleguide/pyguide.html
 
 """
+
+__author__ = """Yossi Mosbacher"""
+__email__ = 'joe.mosbacher@gmail.com'
+__version__ = '0.3.2'
+
 import panel as pn
 
 from .auth import EveAuthBase
@@ -27,6 +32,3 @@ def notebook():
     return pn.extension()
 
 
-__author__ = """Yossi Mosbacher"""
-__email__ = 'joe.mosbacher@gmail.com'
-__version__ = '0.3.2'

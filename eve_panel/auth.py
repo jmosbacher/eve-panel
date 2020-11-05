@@ -57,6 +57,14 @@ class EveAuthBase(param.Parameterized):
 
 
 class EveBasicAuth(EveAuthBase):
+    """
+    Support for eve basic auth.
+
+    Inheritance:
+        EveAuthBase:
+
+    """
+    
     username = param.String(precedence=1, doc="Basic auth username")
     password = param.String(precedence=2, doc="Basic auth password")
     token = param.ClassSelector(bytes, default=b"", doc="Basic auth token")
@@ -78,6 +86,13 @@ class EveBasicAuth(EveAuthBase):
 
 
 class EveBearerAuth(EveAuthBase):
+    """
+    Support for Eve bearer auth.
+
+    Inheritance:
+        EveAuthBase:
+
+    """
     token = param.String(doc="Beaer token")
 
     def get_headers(self):
