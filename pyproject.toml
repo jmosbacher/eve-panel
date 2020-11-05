@@ -40,11 +40,12 @@ pytest = "*"
 sphinx = "*"
 tox = "*"
 yapf = "*"
-nbsphinx = "^0.8.0"
-sphinx-material = {git = "https://github.com/bashtage/sphinx-material.git"}
-numpydoc = "^1.1.0"
+nbsphinx = "*"
+sphinx-material = "*"
+numpydoc = "*"
 
 [tool.dephell.main]
+versioning = "semver"
 from = {format = "poetrylock", path = "poetry.lock"}
 to = {format = "setuppy", path = "setup.py"}
 
