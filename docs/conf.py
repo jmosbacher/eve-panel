@@ -127,7 +127,7 @@ html_theme_options = {
 
     # Specify a base_url used to generate sitemap.xml. If not
     # specified, then no sitemap will be built.
-    'base_url': 'https://jmosbacher.github.io/',
+    'base_url': 'https://eve-panel.readthedocs.io/',
 
     # Set the color and the accent color
     'color_primary': 'cyan',
@@ -147,10 +147,16 @@ html_theme_options = {
     "logo_icon": "&#xe1db",
     "nav_links": [
         {
-            "href": "https://github.com/jmosbacher/xepmts",
+            "href": "https://github.com/pyeve/eve",
             "internal": False,
-            "title": "XEPMTS",
+            "title": "Eve",
         },
+        {
+            "href": "https://github.com/holoviz/panel",
+            "internal": False,
+            "title": "Panel",
+        },
+
     ],
 
 

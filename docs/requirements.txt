@@ -1,0 +1,7 @@
+eve
+panel
+param
+eve-panel
+nbsphinx
+sphinx-material
+numpydoc
