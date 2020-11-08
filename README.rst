@@ -21,35 +21,38 @@ The api is expected to change without warning based on my needs but feel free to
 
 To view the widgets in a notebook you will need to install the pyviz plugin. For details, see panel docs.
 
-Basic usage::
+Usage
+-----
 
-        import eve
-        from eve_panel import EveClient
+.. code-block:: python
+
+    import eve
+    from eve_panel import EveClient
 
 
-        app = eve.Eve()
+    app = eve.Eve()
 
-        client = eve_panel.EveClient.from_app(app)
-        
-        # optional
-        client.auth.set_token("my-secret-token")
+    client = eve_panel.EveClient.from_app(app)
+    
+    # optional
+    client.auth.set_token("my-secret-token")
 
-        api = client.db
+    api = client.db
 
-        # show a resources gui
-        api.resource_name 
+    # show a resources gui
+    api.resource_name 
 
-        # get a specific item
-        api.resource_name["item_id"]
+    # get a specific item
+    api.resource_name["item_id"]
 
-        # get current page
-        api.resource_name.current_page()
+    # get current page
+    api.resource_name.current_page()
 
-        # get next page
-        api.resource_name.next_page()
+    # get next page
+    api.resource_name.next_page()
 
-        # get previous page
-        api.resource_name.previous_page()
+    # get previous page
+    api.resource_name.previous_page()
 
 
 * Free software: MIT
