@@ -279,6 +279,9 @@ class EveItem(EveModelBase):
         header = pn.Column(
             pn.layout.Divider(),
             f"### {self.name}",
+            width_policy='max',
+            sizing_mode='stretch_width',
+            max_width=int(settings.GUI_WIDTH),
         )
         
         # buttons = pn.Row(param_buttons, self.delete_button)
@@ -286,11 +289,19 @@ class EveItem(EveModelBase):
         editors = pn.Param(self.param,
                            show_name=False,
                            default_layout=DefaultLayout,
-                           width=settings.GUI_WIDTH,
                            widgets=self._widgets,
-                           parameters=list(self._schema) +
-                           settings.META_COLUMNS)
-        return pn.Column(header, editors, self.buttons)
+                           parameters=list(self._schema)+settings.META_COLUMNS,
+                           width_policy='max',
+                           sizing_mode='stretch_width',
+                           max_width=int(settings.GUI_WIDTH),
+                           )
+        return pn.Column(header,
+                        editors,
+                        self.buttons,
+                        width_policy='max',
+                        sizing_mode='stretch_width',
+                        max_width=int(settings.GUI_WIDTH),
+                        )
 
     def __repr__(self):
         return f"{self.__class__.__name__}(_id={self._id or self.name})"

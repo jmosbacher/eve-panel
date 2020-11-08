@@ -37,7 +37,7 @@ class EveHttpClient(EveModelBase):
     @param.depends("_busy")
     def busy_indicator(self):
         return pn.Param(self.param._busy,
-                        width=25,
+                        max_width=25,
                         widgets={
                             "_busy": {
                                 "type": pn.indicators.LoadingSpinner,
@@ -211,17 +211,28 @@ class EveHttpxClient(EveHttpClient):
     @param.depends("_messages")
     def messages(self):
         messages = [
-            pn.pane.Alert(msg,
+            pn.pane.Alert(msg.strip("\n").strip(),
                           alert_type="danger",
-                          width=settings.GUI_WIDTH - 20)
+                          align='center',
+                          width_policy='max',
+                          sizing_mode='stretch_width',
+                          max_height=50,
+                          margin=2,
+                          max_width=settings.GUI_WIDTH - 20)
             for msg in self._messages
         ]
-        return pn.Column(*messages, width=settings.GUI_WIDTH)
+        return pn.Column(*messages,
+                        width_policy='max',
+                        height_policy='min',
+                        margin=20,
+                        max_height=settings.MAX_MESSAGES*55+100,
+                        sizing_mode='stretch_both',
+                        max_width=settings.GUI_WIDTH)
 
     def make_panel(self):
         settings = pn.Param(self.param,
                             parameters=["_self_serve", "server_url", "_log"],
-                            width=500,
+                            max_width=500,
                             height=150,
                             show_name=False,
                             widgets={
@@ -235,7 +246,11 @@ class EveHttpxClient(EveHttpClient):
                                     "options": self.server_urls
                                 },
                             })
-        return pn.Column(self.auth.panel, settings)
+        return pn.Column(self.auth.panel,
+                         settings,
+                         width_policy='max',
+                         sizing_mode='stretch_width',
+                         )
 
 
 DEFAULT_HTTP_CLIENT = EveHttpxClient

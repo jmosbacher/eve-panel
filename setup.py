@@ -14,7 +14,7 @@ readme = ''
 setup(
     long_description=readme,
     name='eve_panel',
-    version='0.3.2',
+    version='0.3.3',
     description='Eve-panel.',
     python_requires='>=3.7',
     author='Yossi Mosbacher',
@@ -30,7 +30,7 @@ setup(
         'eve==1.1.4; python_version != "3.0.*" and python_version != "3.1.*" and python_version != "3.2.*" and python_version != "3.3.*" and python_version != "3.4.*" and python_version >= "2.7"',
         'events==0.3',
         'flask==1.1.2; python_version != "3.0.*" and python_version != "3.1.*" and python_version != "3.2.*" and python_version != "3.3.*" and python_version != "3.4.*" and python_version >= "2.7"',
-        'h11==0.11.0', 'httpcore==0.12.0; python_version >= "3.6"',
+        'h11==0.11.0', 'httpcore==0.12.1; python_version >= "3.6"',
         'httpx==0.16.1; python_version >= "3.6"',
         'idna==2.10; python_version != "3.0.*" and python_version != "3.1.*" and python_version != "3.2.*" and python_version != "3.3.*" and python_version >= "2.7"',
         'importlib-metadata==2.0.0; python_version < "3.8" and python_version != "3.0.*" and python_version != "3.1.*" and python_version != "3.2.*" and python_version != "3.3.*" and python_version != "3.4.*" and python_version >= "2.7"',
@@ -61,16 +61,13 @@ setup(
         'werkzeug==1.0.1; python_version != "3.0.*" and python_version != "3.1.*" and python_version != "3.2.*" and python_version != "3.3.*" and python_version != "3.4.*" and python_version >= "2.7"',
         'zipp==3.4.0; python_version < "3.8" and python_version >= "3.6"'
     ],
-    dependency_links=[
-        'git+https://github.com/bashtage/sphinx-material.git@ec5690054e10fd6deb91f67fbb6074a738da6681#egg=sphinx-material'
-    ],
     extras_require={
         "dev": [
             "alabaster==0.7.12", "appdirs==1.4.4",
             "astroid==2.4.2; python_version >= \"3.5\"",
             "async-generator==1.10; python_version >= \"3.5\"",
             "atomicwrites==1.4.0; sys_platform == \"win32\" and python_version != \"3.0.*\" and python_version != \"3.1.*\" and python_version != \"3.2.*\" and python_version != \"3.3.*\" and python_version >= \"2.7\"",
-            "attrs==20.2.0; python_version != \"3.0.*\" and python_version != \"3.1.*\" and python_version != \"3.2.*\" and python_version != \"3.3.*\" and python_version >= \"2.7\"",
+            "attrs==20.3.0; python_version != \"3.0.*\" and python_version != \"3.1.*\" and python_version != \"3.2.*\" and python_version != \"3.3.*\" and python_version >= \"2.7\"",
             "babel==2.8.0; python_version != \"3.0.*\" and python_version != \"3.1.*\" and python_version != \"3.2.*\" and python_version != \"3.3.*\" and python_version >= \"2.7\"",
             "beautifulsoup4==4.9.3",
             "bleach==3.2.1; python_version != \"3.0.*\" and python_version != \"3.1.*\" and python_version != \"3.2.*\" and python_version != \"3.3.*\" and python_version != \"3.4.*\" and python_version >= \"2.7\"",
@@ -115,7 +112,7 @@ setup(
             "snowballstemmer==2.0.0",
             "soupsieve==2.0.1; python_version >= \"3.0\" and python_version >= \"3.5\"",
             "sphinx==3.3.0; python_version >= \"3.5\"",
-            "sphinx-material; python_version >= \"3.6\"",
+            "sphinx-material==0.0.32; python_version >= \"3.6\"",
             "sphinxcontrib-applehelp==1.0.2; python_version >= \"3.5\"",
             "sphinxcontrib-devhelp==1.0.2; python_version >= \"3.5\"",
             "sphinxcontrib-htmlhelp==1.0.3; python_version >= \"3.5\"",

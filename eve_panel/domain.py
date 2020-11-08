@@ -68,7 +68,6 @@ class EveDomain(EveModelBase):
         return instance
 
     def make_panel(self, show_client=True, tabs_location='above'):
-    
         tabs = [
             (k.upper().replace("_", " "),
              getattr(self, k).make_panel(show_client=False,
@@ -81,11 +80,22 @@ class EveDomain(EveModelBase):
         if show_client:
             tabs = [("Config", self._http_client.panel)] + tabs
         view = pn.Tabs(*tabs, dynamic=True, tabs_location=tabs_location)
-
         return view
 
     def set_token(self, token):
         self._http_client.set_token(token)
 
+    def collect_resource_tree(self, sort=True):
+        tree = {}
+        for k, v in self.param.get_param_values():
+            if isinstance(v, EveDomain):
+                tree[k] = v.collect_resource_tree()
+            elif isinstance(v, EveResource):
+                tree[k] = v
+        if sort:
+            tree = dict(sorted(tree.items(), key=lambda x: len(x[0])))
+        return tree
+
     def __dir__(self):
         return list(self.params())
+

@@ -1,7 +1,7 @@
 import itertools
 import json
 from io import BytesIO, StringIO
-
+import time
 import pandas as pd
 import panel as pn
 import param
@@ -14,8 +14,7 @@ from .field import SUPPORTED_SCHEMA_FIELDS, Validator
 from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from .item import EveItem
 from .page import EvePage, EvePageCache, PageZero
-from .io import FILE_READERS, read_file
-
+from .io import FILE_READERS, read_data_file
 
 
 class EveResource(EveModelBase):
@@ -28,6 +27,7 @@ class EveResource(EveModelBase):
         EveModelBase:
 
     """
+    _paste_bin = param.ClassSelector(class_=pn.widgets.Ace, default=None, )
     _http_client = param.ClassSelector(EveHttpClient, precedence=-1)
     _url = param.String(precedence=-1)
     _page_view_format = param.Selector(objects=["Table", "Widgets", "JSON"],
@@ -42,7 +42,8 @@ class EveResource(EveModelBase):
     _item_class = param.ClassSelector(EveItem,
                                       is_instance=False,
                                       precedence=-1)
-    _upload_buffer = param.List(default=[], precedence=-1)
+    # _upload_buffer = param.List(default=[], precedence=-1)
+    _upload_buffer = param.String(default="", precedence=1)
     _file_buffer = param.ClassSelector(bytes)
     _filename = param.String()
     selection = param.ListSelector(default=[], objects=[], precedence=-1)
@@ -126,15 +127,22 @@ class EveResource(EveModelBase):
     @property
     def projection(self):
         return {k: 1 for k in self.columns if k not in settings.META_COLUMNS}
+    
+    @property
+    def paste_bin(self):
+        if self._paste_bin is None:
+            self._paste_bin = pn.widgets.Ace(name="Paste Bin", value=json.dumps(self._schema, indent=4),
+                                             language="json", width=int(settings.GUI_WIDTH-50))
+        return self._paste_bin
 
     def read_clipboard(self):
         from pandas.io.clipboard import clipboard_get
         try:
-            self._upload_buffer = self.filter_docs(json.loads(clipboard_get()))
+            self.paste_bin.value = clipboard_get()
         except Exception as e:
             print(e)
 
-    def read_file(self, f: typing.BinaryIO=None, ext: str="csv"):
+    def read_file(self, f: typing.Union[typing.BinaryIO, str]=None, ext: str="csv"):
         """Read file into the upload buffer.
 
         Args:
@@ -144,10 +152,10 @@ class EveResource(EveModelBase):
         Returns:
             list: documents read
         """
-        if f is None:
+        if isinstance(f, str):
             f = open(f, "rb")
-        data = read_file(f, ext)
-        self._upload_buffer = self.filter_docs(data)
+        data = read_data_file(f, ext)
+        self.paste_bin.value = json.dumps(data, indent=4)
         return data
 
     @param.depends("_file_buffer", watch=True)
@@ -326,7 +334,7 @@ class EveResource(EveModelBase):
         data = json.dumps(docs)
         return self._http_client.post(self._url, data=data)
 
-    def insert_documents(self, docs: Union[list, tuple, dict], validate=True) -> tuple:
+    def insert_documents(self, docs: Union[list, tuple, dict], validate=True, dry=False) -> tuple:
         """Insert documents into the database
 
         Args:
@@ -349,18 +357,29 @@ class EveResource(EveModelBase):
             docs, rejected, errors = self.validate_documents(docs)
         else:
             rejected, errors = [], []
-        if docs and self.post(docs):
+        if dry:
+            success = docs
+        elif docs and self.post(docs):
             success = docs
         else:
             success = []
         return success, rejected, errors
 
     def clear_upload_buffer(self):
-        self._upload_buffer = []
+        self.paste_bin.value = ""
 
-    def flush_buffer(self):
-        success, rejected, errors = self.insert_documents(self._upload_buffer)
-        self._upload_buffer = rejected
+    def flush_buffer(self, dry=False):
+        try:
+            docs = json.loads(self.paste_bin.value)
+        except:
+            self.upload_errors = ["Cannot read data. is it valid json?"]
+            return []
+
+        if isinstance(docs, dict):
+            docs = [docs]
+        success, rejected, errors = self.insert_documents(docs, dry=dry)
+        if not dry:
+            self.paste_bin.value = json.dumps(rejected)
         self.upload_errors = [str(err) for err in errors]
         return success
 
@@ -383,6 +402,11 @@ class EveResource(EveModelBase):
         self._cache[idx].push()
 
     def get_page(self, idx):
+        for _ in range(100):
+            if self._http_client._busy:
+                time.sleep(0.2)
+            else:
+                break
         if idx not in self._cache or not len(self._cache[idx]):
             self.pull_page(idx)
         return self._cache.get(
@@ -430,6 +454,7 @@ class EveResource(EveModelBase):
         if page_number is None:
             page_number = self.page_number
         self.pull_page(page_number)
+        self._cache = self._cache
 
     def remove_item(self, _id: str) -> bool:
         return self[_id].delete()
@@ -447,45 +472,53 @@ class EveResource(EveModelBase):
             raise ValueError("Mongo projections can either be inclusive or exclusive but not both.")
         return self.clone(columns=columns)
 
-
-    @param.depends("_upload_buffer")
+    @param.depends("_url")
     def upload_view(self):
         clear_button = pn.widgets.Button(name="Clear buffer",
                                          button_type="warning",
-                                         width=int(settings.GUI_WIDTH / 4))
+                                         width_policy='max',
+                                         sizing_mode='stretch_width',
+                                         max_width=int(settings.GUI_WIDTH / 4))
         clear_button.on_click(lambda event: self.clear_upload_buffer())
 
         upload_file = pn.widgets.FileInput(accept=",".join(
             [f".{ext}" for ext in FILE_READERS]),
-                                           width=int(settings.GUI_WIDTH / 4))
+                                           max_width=int(settings.GUI_WIDTH / 4))
         upload_file.link(self, filename="_filename", value="_file_buffer")
         upload_file_button = pn.widgets.Button(name="Read file",
                                                button_type="primary",
-                                               width=int(settings.GUI_WIDTH /
+                                               width_policy='max',
+                                               sizing_mode='stretch_width',
+                                               max_width=int(settings.GUI_WIDTH /
                                                          4))
         upload_file_button.on_click(lambda event: self._read_file_buffer())
 
-        upload_preview = pn.pane.JSON(self._upload_buffer,
-                                      name='Upload Buffer',
-                                      height=int(settings.GUI_HEIGHT / 2),
-                                      width=int(settings.GUI_WIDTH),
-                                      theme="light")
         upload_button = pn.widgets.Button(name="Insert to DB",
                                           button_type="success",
-                                          width=int(settings.GUI_WIDTH / 4))
+                                          width_policy='max',
+                                          sizing_mode='stretch_width',
+                                          max_width=int(settings.GUI_WIDTH / 4))
         upload_button.on_click(lambda event: self.flush_buffer())
         read_clipboard_button = pn.widgets.Button(name="Read Clipboard",
                                                   button_type="primary",
-                                                  width=int(
+                                                  width_policy='max',
+                                                  sizing_mode='stretch_width',
+                                                  max_width=int(
                                                       settings.GUI_WIDTH / 4))
         read_clipboard_button.on_click(lambda event: self.read_clipboard())
 
-        first_row_buttons = pn.Row(upload_file, read_clipboard_button)
-        second_row_buttons = pn.Row(clear_button, upload_button)
-        input_buttons = pn.Column(first_row_buttons, second_row_buttons)
+        validate_button = pn.widgets.Button(name="Validate",
+                                                  button_type="primary",
+                                                  width_policy='max',
+                                                  sizing_mode='stretch_width',
+                                                  max_width=int(
+                                                      settings.GUI_WIDTH / 4))
+        validate_button.on_click(lambda event: self.flush_buffer(dry=True))
 
-        upload_view = pn.Column(input_buttons, self.upload_errors,
-                                "### Upload buffer", upload_preview)
+        first_row_buttons = pn.Row(upload_file, upload_file_button, read_clipboard_button)
+        second_row_buttons = pn.Row(validate_button, clear_button, upload_button)
+        input_buttons = pn.Column(first_row_buttons, second_row_buttons)
+        upload_view = pn.Column(self.paste_bin, input_buttons,"### Errors:",  self.upload_errors_view)
         return upload_view
 
     @param.depends("page_number", "_cache", "_page_view_format")
@@ -499,14 +532,73 @@ class EveResource(EveModelBase):
     @param.depends("upload_errors")
     def upload_errors_view(self):
         alerts = [
-            pn.pane.Alert(err, alert_type="danger")
+            pn.pane.Alert(err, alert_type="danger",
+            margin=2,
+            width_policy='max',
+            sizing_mode='stretch_width',
+            max_width=int(settings.GUI_WIDTH - 30)
+            )
             for err in self.upload_errors
         ]
         return pn.Column(*alerts,
-                         height=50,
-                         width=int(settings.GUI_WIDTH - 30))
+                         scroll=True,
+                         max_height=300,
+                         width_policy='max',
+                         sizing_mode='stretch_width',
+                         max_width=int(settings.GUI_WIDTH - 30))
+
+    @param.depends("current_page")
+    def download_view(self):
+        # data_selection = pn.widgets.RadioBoxGroup(options=["Current Page", "Range"])
+        # page_range = pn.widgets.IntRangeSlider()
+        page_num_select = pn.widgets.IntInput(name="Page", value=self.page_number, step=1, start=1, end=int(1e6))
+        def cb():
+            page = self.get_page(page_num_select.value)
+            return page.to_file()
+        download_button = pn.widgets.FileDownload(callback=cb, label="Download JSON", filename=f'{self.name}_page{page_num_select.value}.json')
+        return pn.Column(page_num_select, download_button )
 
     def make_panel(self, show_client=True, tabs_location='above'):
+        column_select = pn.Param(self.param.columns,
+                            width_policy='max',
+                            sizing_mode='stretch_width',
+                            max_width=int(settings.GUI_WIDTH - 30),
+                            widgets={
+                                "columns": {
+                                    "type": pn.widgets.MultiChoice,
+                                    "options": list(self._schema) +
+                                    settings.META_COLUMNS,
+                                    "width": int(settings.GUI_WIDTH - 30)
+                                }
+                            })
+
+        page_settings = pn.Column(pn.Row(self.param.items_per_page,
+                                         self.param.filters,
+                                         self.param._page_view_format,
+                                         width_policy='max',
+                                         sizing_mode='stretch_width',
+                                         max_width=int(settings.GUI_WIDTH - 50)),
+                                  column_select,
+                                  max_width=int(settings.GUI_WIDTH - 10))
+        if show_client:
+            page_settings.append("### HTTP client")
+            page_settings.append(pn.layout.Divider())
+            page_settings.append(self._http_client.panel)
+
+
+        tabs = pn.Tabs(
+                ("Data", self.current_page_view),
+                ("Upload", self.upload_view()),
+                ("Download", self.download_view),
+                ("Config", page_settings),
+                ("Errors", self._http_client.messages),
+                dynamic=False,
+                tabs_location=tabs_location,
+                width_policy='max',
+                sizing_mode='stretch_width',
+                max_width=int(settings.GUI_WIDTH),
+            )
+
         buttons = pn.Param(self.param,
                            parameters=[
                                "_prev_page_button", "page_number",
@@ -514,47 +606,26 @@ class EveResource(EveModelBase):
                            ],
                            default_layout=pn.Row,
                            name="",
-                           width=int(settings.GUI_WIDTH / 3))
-
-        column_select = pn.Param(self.param.columns,
-                                 width=int(settings.GUI_WIDTH - 30),
-                                 widgets={
-                                     "columns": {
-                                         "type": pn.widgets.MultiChoice,
-                                         "options": list(self._schema) +
-                                         settings.META_COLUMNS,
-                                         "width": int(settings.GUI_WIDTH - 30)
-                                     }
-                                 })
-
-        page_settings = pn.Column(pn.Row(self.param.items_per_page,
-                                         self.param.filters,
-                                         self.param._page_view_format,
-                                         width=int(settings.GUI_WIDTH - 50)),
-                                  column_select,
-                                  width=int(settings.GUI_WIDTH - 10))
-        if show_client:
-            page_settings.append("### HTTP client")
-            page_settings.append(pn.layout.Divider())
-            page_settings.append(self._http_client.panel)
+                           width_policy='max',
+                           sizing_mode='stretch_width',
+                           max_width=int(settings.GUI_WIDTH / 3))
 
         header = pn.Row(
-            f"## {self.name} resource",
+            f'## {self.name.replace("_", " ").title()} resource',
             pn.Spacer(sizing_mode='stretch_both'),
             buttons,
             pn.Spacer(sizing_mode='stretch_both'),
-            self._http_client.busy_indicator,
+            
         )
+        if settings.SHOW_INDICATOR:
+            header.append(self._http_client.busy_indicator)
 
         view = pn.Column(
-            header, self._http_client.messages,
-            pn.Tabs(
-                ("Data", self.current_page_view),
-                ("Upload", self.upload_view),
-                ("Config", page_settings),
-                dynamic=True,
-                tabs_location=tabs_location,
-                width=int(settings.GUI_WIDTH),
-            ))
+            header, 
+            tabs,
+            width_policy='max',
+            sizing_mode='stretch_width',
+            max_width=int(settings.GUI_WIDTH),
+            )
 
         return view

@@ -25,10 +25,15 @@ from .eve_client import EveClient
 from .item import EveItem
 from .resource import EveResource
 from .utils import from_app_config
+from .menu import Menu, css
+from .web_client import EveWebClient
 
 
 def notebook():
     """ Load notebook support. """
-    return pn.extension()
+    return pn.extension('ace')
 
-
+def extension():
+   pn.extension('ace')
+   pn.config.raw_css.append(css)
+   

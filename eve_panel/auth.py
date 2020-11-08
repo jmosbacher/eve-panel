@@ -55,6 +55,8 @@ class EveAuthBase(param.Parameterized):
         """
         self.token = token
 
+    def credentials_view(self):
+        return pn.Row()
 
 class EveBasicAuth(EveAuthBase):
     """
@@ -84,6 +86,11 @@ class EveBasicAuth(EveAuthBase):
                         parameters=["username", "password"],
                         widgets={"password": pn.widgets.PasswordInput})
 
+    def credentials_view(self):
+        return pn.Param(self.param,
+                        parameters=["username", "password"],
+                        widgets={"password": pn.widgets.PasswordInput},
+                        default_layout=pn.Row)
 
 class EveBearerAuth(EveAuthBase):
     """
@@ -106,6 +113,9 @@ class EveBearerAuth(EveAuthBase):
 
     def panel(self):
         return pn.panel(self.param.token)
+
+    def credentials_view(self):
+        return self.panel()
 
 
 AUTH_CLASSES = {
@@ -149,6 +159,14 @@ class AuthSelector(EveAuthBase):
             return pn.Column()
 
         return self._auth_object.panel()
+
+    @param.depends("_auth_object")
+    def credentials_view(self):
+        if self._auth_object is None or not hasattr(self._auth_object,
+                                                    "credentials_view"):
+            return pn.Row("# No Authentication defined.")
+
+        return self._auth_object.credentials_view()
 
     def set_auth_by_name(self, name):
         self._auth_object = self.param._auth_object.names[name]

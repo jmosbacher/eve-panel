@@ -1,5 +1,5 @@
 from io import BytesIO, StringIO
-
+import json
 import pandas as pd
 import panel as pn
 import param
@@ -45,6 +45,11 @@ class EvePage(EveModelBase):
     def to_records(self):
         return [item.to_dict() for item in self.values()]
 
+    def to_file(self, indent=4):
+        docs = self.to_records()
+        f = StringIO(json.dumps(docs, indent=indent))
+        return f
+
     def records(self):
         for item in self.values():
             yield item.to_dict()
@@ -75,6 +80,9 @@ class EvePage(EveModelBase):
         items = [(item.name, item.panel()) for item in self._items.values()]
         view = pn.Tabs(*items,
                        dynamic=True,
+                       width_policy='max',
+                       sizing_mode='stretch_width',
+                       max_width=int(settings.GUI_WIDTH),
                        height=int(settings.GUI_HEIGHT - 10),
                        width=settings.GUI_WIDTH)
         return view
@@ -86,6 +94,9 @@ class EvePage(EveModelBase):
         df = self.to_dataframe()
         return pn.widgets.DataFrame(df,
                                     disabled=True,
+                                    width_policy='max',
+                                    sizing_mode='stretch_width',
+                                    max_width=int(settings.GUI_WIDTH),
                                     width=settings.GUI_WIDTH,
                                     height=int(settings.GUI_HEIGHT - 30))
 
@@ -93,6 +104,9 @@ class EvePage(EveModelBase):
     def json_view(self):
         return pn.pane.JSON(self.to_records(),
                             theme="light",
+                            width_policy='max',
+                            sizing_mode='stretch_width',
+                            max_width=int(settings.GUI_WIDTH),
                             width=settings.GUI_WIDTH,
                             height=int(settings.GUI_HEIGHT - 30))
 
@@ -100,10 +114,18 @@ class EvePage(EveModelBase):
         tabs = pn.Tabs(("Table", self.table_view),
                        ("Widgets", self.widgets_view),
                        ("JSON", self.json_view),
+                       width_policy='max',
+                       sizing_mode='stretch_width',
+                       max_width=int(settings.GUI_WIDTH),
                        height=int(settings.GUI_HEIGHT),
-                       width=settings.GUI_WIDTH,
                        dynamic=True)
-        return pn.Column(f"## {self.name}", tabs)
+
+        return pn.Column(
+                f"## {self.name}", 
+                tabs,
+                width_policy='max',
+                sizing_mode='stretch_width',
+                max_width=int(settings.GUI_WIDTH),)
 
 
 class PageZero(EvePage):
@@ -121,13 +143,15 @@ class PageZero(EvePage):
 
     def panel(self):
         return pn.Column(
-            pn.layout.Divider(width=settings.GUI_WIDTH),
+            pn.layout.Divider(),
             "### You are on the landing page for this resource, no data here.",
             "TIP 1: Use the \u23E9 button to load the first page.",
             "TIP 2: You can use the settings tab to change what data is loaded and how it is displayed.",
             "TIP 3: If you just want to upload data, you can go directly to the upload tab.",
-            pn.layout.Divider(width=settings.GUI_WIDTH),
-            width=settings.GUI_WIDTH,
+            pn.layout.Divider(),
+            width_policy='max',
+            sizing_mode='stretch_width',
+            width=int(settings.GUI_WIDTH),
             height=300,
         )
 

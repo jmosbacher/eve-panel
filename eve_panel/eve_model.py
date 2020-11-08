@@ -25,7 +25,7 @@ class EveModelBase(param.Parameterized):
             k for k, v in self.params().items() if not k.startswith("_")
         ]
         panel = pn.Param(self.param,
-                         width=settings.GUI_WIDTH,
+                         max_width=settings.GUI_WIDTH,
                          parameters=parameters,
                          default_layout=pn.Card)
         return panel
@@ -33,7 +33,7 @@ class EveModelBase(param.Parameterized):
     def panel(self):
         # return self.make_panel()
         if self._panel is None:
-            self._panel = pn.panel(self.make_panel)
+            self._panel = self.make_panel()
         return self._panel
 
     def _repr_mimebundle_(self, include=None, exclude=None):

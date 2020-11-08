@@ -16,12 +16,12 @@ FILE_READERS = {
 }
 
 
-def read_file(f, ext):
+def read_data_file(f, ext):
     if ext in FILE_READERS:
         data = FILE_READERS[ext](f)
         if isinstance(data, list):
             return data
-        elif isinstance(data, (dict, )):
+        elif isinstance(data, dict):
             return [data]
     return []
 

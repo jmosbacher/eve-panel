@@ -44,7 +44,7 @@ class EveClient(EveModelBase):
 
     @property
     def domains(self):
-        return {k: v for k,v in self.get_param_values() if isinstance(v, EveDomain)}
+        return {k: v for k,v in self.param.get_param_values() if isinstance(v, EveDomain)}
 
     def make_panel(self, show_client=False):
         domains = [(k.replace("_", " ").upper(), v.panel()) for k,v in self.domains.items()]
@@ -55,5 +55,10 @@ class EveClient(EveModelBase):
         else:
             name, domain = domains[0]
             return pn.Column(f"### {name}", domain)
+
+    def collect_domain_tree(self):
+        return {k: v.collect_resource_tree() for k, v in self.domains.items()}
+
     def __repr__(self):
         return f"EveClient(name={self.name}, domains={len(self.domains)})"
+    
