@@ -29,6 +29,11 @@ panel = "*"
 httpx = "^0.16.1"
 pandas = "*"
 
+# optional
+dask = { optional = true, version = "*" }
+hvplot = { optional = true, version = "*" }
+
+
 [tool.poetry.dev-dependencies]
 bumpversion = "*"
 coverage = "*"
@@ -44,9 +49,14 @@ nbsphinx = "*"
 sphinx-material = "*"
 numpydoc = "*"
 
+[tool.poetry.extras]
+dask = ["dask"]
+plotting = ["hvplot"]
+full = ["dask", "hvplot"]
+
 [tool.dephell.main]
 versioning = "semver"
-from = {format = "poetrylock", path = "poetry.lock"}
+from = {format = "poetry", path = "pyproject.toml"}
 to = {format = "setuppy", path = "setup.py"}
 
 [build-system]

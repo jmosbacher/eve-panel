@@ -11,7 +11,7 @@ from .item import EveItem
 
 
 class EvePage(EveModelBase):
-    _columns = param.List(default=["_id"])
+    fields = param.List(default=["_id"])
     _items = param.Dict(default={})
 
     def __getitem__(self, key):
@@ -55,7 +55,7 @@ class EvePage(EveModelBase):
             yield item.to_dict()
 
     def to_dataframe(self):
-        df = pd.DataFrame(self.to_records(), columns=self._columns)
+        df = pd.DataFrame(self.to_records(), columns=self.fields)
         if "_id" in df.columns:
             df = df.set_index("_id")
         return df
@@ -82,9 +82,9 @@ class EvePage(EveModelBase):
                        dynamic=True,
                        width_policy='max',
                        sizing_mode='stretch_width',
-                       max_width=int(settings.GUI_WIDTH),
+                       width=self.max_width,
                        height=int(settings.GUI_HEIGHT - 10),
-                       width=settings.GUI_WIDTH)
+        )
         return view
 
     @param.depends("_items")
@@ -97,7 +97,7 @@ class EvePage(EveModelBase):
                                     width_policy='max',
                                     sizing_mode='stretch_width',
                                     max_width=int(settings.GUI_WIDTH),
-                                    width=settings.GUI_WIDTH,
+                                    width=self.max_width,
                                     height=int(settings.GUI_HEIGHT - 30))
 
     @param.depends("_items")
@@ -107,7 +107,7 @@ class EvePage(EveModelBase):
                             width_policy='max',
                             sizing_mode='stretch_width',
                             max_width=int(settings.GUI_WIDTH),
-                            width=settings.GUI_WIDTH,
+                            width=self.max_width,
                             height=int(settings.GUI_HEIGHT - 30))
 
     def panel(self):
@@ -116,7 +116,7 @@ class EvePage(EveModelBase):
                        ("JSON", self.json_view),
                        width_policy='max',
                        sizing_mode='stretch_width',
-                       max_width=int(settings.GUI_WIDTH),
+                       width=self.max_width,
                        height=int(settings.GUI_HEIGHT),
                        dynamic=True)
 
@@ -125,7 +125,8 @@ class EvePage(EveModelBase):
                 tabs,
                 width_policy='max',
                 sizing_mode='stretch_width',
-                max_width=int(settings.GUI_WIDTH),)
+                max_width=self.max_width,
+                width=self.max_width,)
 
 
 class PageZero(EvePage):
@@ -150,8 +151,9 @@ class PageZero(EvePage):
             "TIP 3: If you just want to upload data, you can go directly to the upload tab.",
             pn.layout.Divider(),
             width_policy='max',
-            sizing_mode='stretch_width',
-            width=int(settings.GUI_WIDTH),
+            sizing_mode=self.sizing_mode,
+            width=self.max_width,
+            max_width=self.max_width,
             height=300,
         )
 
@@ -170,7 +172,8 @@ class EvePageCache(param.Parameterized):
             return self._pages[key]
 
     def __setitem__(self, key, value):
-        self._pages[key] = value
+        if isinstance(value, EvePage):
+            self._pages[key] = value
 
     def __contains__(self, key):
         if isinstance(key, str):
@@ -182,7 +185,14 @@ class EvePageCache(param.Parameterized):
         return key in self._pages
 
     def get(self, key, fallback=None):
-        return self._pages.get(key, fallback)
+        if isinstance(key, str):
+            for page in self._pages.values():
+                if key in page:
+                    return page[key]
+            else:
+                return fallback
+        else:
+            return self._pages.get(key, fallback)
 
     def keys(self):
         yield from self._pages.keys()
@@ -192,3 +202,6 @@ class EvePageCache(param.Parameterized):
 
     def items(self):
         yield from self._pages.items()
+
+    def pop(self, key):
+        self._pages.pop(key)

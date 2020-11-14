@@ -1,8 +1,9 @@
-GUI_WIDTH = 720
-GUI_HEIGHT = 300
+GUI_WIDTH = 1000
+GUI_HEIGHT = 400
 WIDGET_VIEW_ITEMS = 8
 DEFAULT_VIEW_FORMAT = "Table"
 MAX_LOG_SIZE = 20
 MAX_MESSAGES = 3
-META_COLUMNS = ["_version", "_latest_version", "_etag"]
+META_FIELDS = ["_version", "_latest_version", "_etag", "_created"]
 SHOW_INDICATOR = True
+SIZING_MODE = "stretch_width"

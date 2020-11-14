@@ -12,9 +12,9 @@ import param
 import pkg_resources
 
 from .eve_model import EveModelBase
+from . import settings
 
-
-class EveAuthBase(param.Parameterized):
+class EveAuthBase(EveModelBase):
     """Base class for Eve authentication scheme
 
     Inheritance:
@@ -37,15 +37,6 @@ class EveAuthBase(param.Parameterized):
             bool: whether login was successful
         """
         return True
-
-    def panel(self):
-        """Get the panel representation of this object for GUI
-
-        Returns:
-            panel.Viewable: GUI widgets with impotant inputs
-                and feedback for the auth scheme
-        """
-        return pn.Column()
 
     def set_token(self, token):
         """Set the access token manually.
@@ -81,8 +72,11 @@ class EveBasicAuth(EveAuthBase):
         self.login()
         return {"Authorization": f"Basic {self.token}"}
 
-    def panel(self):
+    def make_panel(self):
         return pn.Param(self.param,
+                        max_width=self.max_width,
+                        max_height=self.max_height,
+                        sizing_mode=self.sizing_mode,
                         parameters=["username", "password"],
                         widgets={"password": pn.widgets.PasswordInput})
 
@@ -90,6 +84,9 @@ class EveBasicAuth(EveAuthBase):
         return pn.Param(self.param,
                         parameters=["username", "password"],
                         widgets={"password": pn.widgets.PasswordInput},
+                        max_width=self.max_width,
+                        max_height=self.max_height,
+                        sizing_mode=self.sizing_mode,
                         default_layout=pn.Row)
 
 class EveBearerAuth(EveAuthBase):
@@ -111,8 +108,12 @@ class EveBearerAuth(EveAuthBase):
     def login(self):
         return bool(self.token)
 
-    def panel(self):
-        return pn.panel(self.param.token)
+    def make_panel(self):
+        return pn.panel(self.param.token,
+                        max_width=self.max_width,
+                        max_height=self.max_height,
+                        sizing_mode=self.sizing_mode,
+        )
 
     def credentials_view(self):
         return self.panel()
@@ -156,7 +157,9 @@ class AuthSelector(EveAuthBase):
     def auth_view(self):
         if self._auth_object is None or not hasattr(self._auth_object,
                                                     "panel"):
-            return pn.Column()
+            return pn.Column(max_width=self.max_width,
+                            max_height=self.max_height,
+                            sizing_mode=self.sizing_mode,)
 
         return self._auth_object.panel()
 
@@ -172,7 +175,11 @@ class AuthSelector(EveAuthBase):
         self._auth_object = self.param._auth_object.names[name]
 
     def panel(self):
-        return pn.Column(self.param._auth_object, self.auth_view)
+        return pn.Column(self.param._auth_object,
+                         self.auth_view, 
+                        max_width=self.max_width,
+                        max_height=self.max_height,
+                        sizing_mode=self.sizing_mode,)
 
     def __init__(self, **params):
         super().__init__(**params)

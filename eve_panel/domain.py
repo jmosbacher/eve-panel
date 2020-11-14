@@ -79,7 +79,14 @@ class EveDomain(EveModelBase):
         tabs.sort(key=lambda x: len(x[0]))
         if show_client:
             tabs = [("Config", self._http_client.panel)] + tabs
-        view = pn.Tabs(*tabs, dynamic=True, tabs_location=tabs_location)
+        view = pn.Tabs(*tabs,
+                    width=self.max_width-10,
+                    max_width=self.max_width,
+                    height=self.max_height,
+                    sizing_mode=self.sizing_mode,
+                    width_policy="max",
+                    dynamic=True,
+                    tabs_location=tabs_location)
         return view
 
     def set_token(self, token):

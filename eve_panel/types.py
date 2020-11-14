@@ -1,5 +1,6 @@
 import param
 from bson import objectid
+import numpy as np
 
 
 class CoerceClassSelector(param.ClassSelector):
@@ -37,4 +38,21 @@ TYPE_MAPPING = {
     "set": set_param,
     "string": param.String,
     "media": bytes_param,
+}
+
+DASK_TYPE_MAPPING = {
+    "objectid": str,
+    "boolean": bool,
+    "binary": bytes,
+    "date": np.datetime64,
+    "datetime": np.datetime64,
+    "dict": dict,
+    "float": float,
+    "integer": int,
+    "list": list,
+    "number": float,
+    "set": set,
+    "string": str,
+    "media": bytes,
+
 }

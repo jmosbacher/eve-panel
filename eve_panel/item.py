@@ -55,7 +55,7 @@ class EveItem(EveModelBase):
         if http_client is None:
             http_client = DEFAULT_HTTP_CLIENT()
         params = dict(
-            _schema=param.Dict(default=schema,
+            schema=param.Dict(default=schema,
                                allow_None=False,
                                constant=True,
                                precedence=-1),
@@ -110,7 +110,7 @@ class EveItem(EveModelBase):
                                         precedence=-1)
         klass = type(name, (EveItem, ), params)
 
-        return klass(_schema=schema,
+        return klass(schema=schema,
                      _widgets=_widgets,
                      _resource_url=resource_url,
                      _http_client=http_client,
@@ -124,7 +124,7 @@ class EveItem(EveModelBase):
         self.push()
 
     def to_record(self):
-        return {k: getattr(self, k) for k in self._schema}
+        return {k: getattr(self, k) for k in self. schema}
 
     def to_dict(self):
         return self.to_record()
@@ -139,13 +139,13 @@ class EveItem(EveModelBase):
         yield from self.to_record().items()
 
     def __getitem__(self, key):
-        if key in self._schema:
+        if key in self. schema:
             return getattr(self, key)
         else:
             raise KeyError(f"{key} not found.")
     
     def __setitem__(self, key, value):
-        if key in self._schema:
+        if key in self. schema:
             setattr(self, key, value)
         else:
             raise KeyError(f"{key} cannot be set.")
@@ -207,7 +207,7 @@ class EveItem(EveModelBase):
             etag = self._etag
         else:
             etag = ""
-        for k in self._schema:
+        for k in self. schema:
             data[k] = getattr(self, k)
         self._http_client.put(self.url, data, etag=etag)
         self.pull()
@@ -231,7 +231,7 @@ class EveItem(EveModelBase):
         return self._deleted
 
     def clone(self):
-        data = {k: getattr(self, k) for k in self._schema}
+        data = {k: getattr(self, k) for k in self. schema}
         return self.__class__(**data)
 
     @param.depends("_delete_requested")
@@ -280,8 +280,8 @@ class EveItem(EveModelBase):
             pn.layout.Divider(),
             f"### {self.name}",
             width_policy='max',
-            sizing_mode='stretch_width',
-            max_width=int(settings.GUI_WIDTH),
+            sizing_mode=self.sizing_mode,
+            width=self.max_width,
         )
         
         # buttons = pn.Row(param_buttons, self.delete_button)
@@ -290,17 +290,17 @@ class EveItem(EveModelBase):
                            show_name=False,
                            default_layout=DefaultLayout,
                            widgets=self._widgets,
-                           parameters=list(self._schema)+settings.META_COLUMNS,
+                           parameters=list(self. schema)+settings.META_FIELDS,
                            width_policy='max',
-                           sizing_mode='stretch_width',
-                           max_width=int(settings.GUI_WIDTH),
+                           sizing_mode=self.sizing_mode,
+                           width=self.max_width,
                            )
         return pn.Column(header,
                         editors,
                         self.buttons,
                         width_policy='max',
-                        sizing_mode='stretch_width',
-                        max_width=int(settings.GUI_WIDTH),
+                        sizing_mode=self.sizing_mode,
+                        width=self.max_width,
                         )
 
     def __repr__(self):

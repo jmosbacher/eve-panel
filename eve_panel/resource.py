@@ -7,7 +7,9 @@ import panel as pn
 import param
 import yaml
 import typing
-from typing import Union
+import math
+from typing import Union, List, Dict, Tuple
+
 from . import settings
 from .eve_model import EveModelBase
 from .field import SUPPORTED_SCHEMA_FIELDS, Validator
@@ -15,7 +17,14 @@ from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from .item import EveItem
 from .page import EvePage, EvePageCache, PageZero
 from .io import FILE_READERS, read_data_file
+from .types import DASK_TYPE_MAPPING
 
+try:
+    from ruamel.yaml import YAML
+    yaml = YAML()
+    yaml.indent(mapping=4, sequence=4, offset=2)
+except ImportError:
+    import yaml
 
 class EveResource(EveModelBase):
     """
@@ -35,8 +44,8 @@ class EveResource(EveModelBase):
                                        label="Display Format",
                                        precedence=1)
     upload_errors = param.List(default=[])
-    _resource = param.Dict(default={}, constant=True, precedence=-1)
-    _schema = param.Dict(default={}, constant=True, precedence=-1)
+    _resource_def = param.Dict(default={}, constant=True, precedence=-1)
+    schema = param.Dict(default={}, constant=True, precedence=-1)
 
     _cache = param.ClassSelector(class_=EvePageCache, default=EvePageCache())
     _item_class = param.ClassSelector(EveItem,
@@ -46,12 +55,12 @@ class EveResource(EveModelBase):
     _upload_buffer = param.String(default="", precedence=1)
     _file_buffer = param.ClassSelector(bytes)
     _filename = param.String()
-    selection = param.ListSelector(default=[], objects=[], precedence=-1)
 
     filters = param.Dict(default={}, doc="Filters")
-    columns = param.List(default=[], precedence=1)
+    fields = param.List(default=[], precedence=1)
+    sorting = param.List(default=[], precedence=1)
 
-    items_per_page = param.Integer(default=10,
+    items_per_page = param.Integer(default=25,
                                    label="Items per page",
                                    precedence=1)
     _prev_page_button = param.Action(lambda self: self.decrement_page(),
@@ -64,10 +73,14 @@ class EveResource(EveModelBase):
                                 precedence=2)
     _reload_page_button = param.Action(lambda self: self.reload_page(),
                                      label="\u21BB",
-                                     precedence=3)
+                                     precedence=4)
     _next_page_button = param.Action(lambda self: self.increment_page(),
                                      label="\u23E9",
-                                     precedence=4)
+                                     precedence=3)
+    _clear_cache_button = param.Action(lambda self: self.clear_cache(),
+                                     label="\u2672",
+                                     precedence=5)
+    _plot_selection = param.String("None")
 
     @classmethod
     def from_resource_def(cls,
@@ -95,13 +108,14 @@ class EveResource(EveModelBase):
                                    resource["url"],
                                    http_client=http_client)
         item_class = item.__class__
+        plots = list(resource.get("metadata", {}).get("plots", {}))
         params = dict(name=resource["resource_title"].replace(" ", "_"),
                       _url=resource["url"],
                       _http_client=http_client,
                       _item_class=item_class,
-                      _resource=resource,
-                      _schema=schema,
-                      columns=list(schema))
+                      _resource_def=resource,
+                      schema=schema,
+                      fields=list(schema))
         return cls(**params)
 
     def __getitem__(self, key):
@@ -126,16 +140,56 @@ class EveResource(EveModelBase):
 
     @property
     def projection(self):
-        return {k: 1 for k in self.columns if k not in settings.META_COLUMNS}
+        return {k: 1 for k in self.fields if k not in settings.META_FIELDS}
     
     @property
     def paste_bin(self):
         if self._paste_bin is None:
-            self._paste_bin = pn.widgets.Ace(name="Paste Bin", value=json.dumps(self._schema, indent=4),
-                                             language="json", width=int(settings.GUI_WIDTH-50))
+            self._paste_bin = pn.widgets.Ace(name="Paste Bin", value=json.dumps(self.schema, indent=4),
+                                             language="json", width=int(self.max_width-50))
         return self._paste_bin
+    
+    @property
+    def field_options(self):
+        return list(self.schema) + settings.META_FIELDS
+
+    @property
+    def nitems(self):
+        resp = self.get(where=self.filters,
+                        projection={"_id": 1},
+                        sort=self.sorting,
+                        max_results=1,
+                        page=1)
+        if "_meta" in resp:
+            return int(resp["_meta"].get("total", 0))
+        else:
+            raise ConnectionError("Unable to connect to server.")
+
+    @property
+    def page_options(self):
+        return list(range(1, math.ceil(self.nitems/self.items_per_page)+1))
+
+    @property
+    def sorting_options(self)->list:
+        """Returns valid options for the sorting attribute.
+
+        Returns:
+            list: list of fields
+        """
+        return self.field_options + [f"-{col}" for col in self.field_options]
+
+    @property
+    def metadata(self) -> dict:
+        """Resource metadata
+
+        Returns:
+            dict: Resource metadata
+        """
+        return self._resource_def.get("metadata", {})
 
     def read_clipboard(self):
+        """Read clipboard into uplaod buffer.
+        """
         from pandas.io.clipboard import clipboard_get
         try:
             self.paste_bin.value = clipboard_get()
@@ -164,11 +218,19 @@ class EveResource(EveModelBase):
         _,_, ext = self._filename.rpartition(".")
         self.read_file(sio, ext)
 
-    def filter_docs(self, docs):
+    def filter_fields(self, docs: Union[Dict, List[Dict]]) -> List[Dict]:
+        """Filter only fields that are in the resource schema for a list of documents.
+
+        Args:
+            docs (Union[dict, list[dict]]): list of documents or single document.
+
+        Returns:
+            list[dict]: list of filtered documents.
+        """
         if isinstance(docs, dict):
             docs = [docs]
         return [{k: v
-                 for k, v in doc.items() if k in self._schema} for doc in docs]
+                 for k, v in doc.items() if k in self.schema} for doc in docs]
 
     @property
     def gui(self):
@@ -216,6 +278,27 @@ class EveResource(EveModelBase):
             df = df.set_index("_id")
         return df
 
+    def to_dask(self, pages=None, clone=True):
+        try:
+            import dask.dataframe as dd
+        except ImportError:
+            raise RuntimeError("Dask is not installed.")
+        if clone:
+            resource = self.clone()
+        else:
+            resource = self
+        if pages is None:
+            pages = resource.page_options
+        dsk = {(resource.name, i-1): (resource.get_page_df, i) for i in pages}
+        name = resource.name
+        nitems = resource.nitems
+        columns = [(k, DASK_TYPE_MAPPING[v["type"]]) for k,v in resource.schema.items() 
+                                    if k in self.fields and not k.startswith("_")]
+        divisions = list(range(0, nitems, resource.items_per_page))
+        if nitems not in divisions:
+           divisions = divisions + [resource.nitems]
+        return dd.DataFrame(dsk, name, columns, divisions)
+
     def pull(self, start=1, end=None):
         for idx in itertools.count(start):
             if end is not None and idx > end:
@@ -229,12 +312,18 @@ class EveResource(EveModelBase):
         for idx in idxs:
             self._cache[idx].push()
 
-    def find(self, query={}, projection={}, max_results=25, page_number=1):
+    def get(self, **kwargs):
+        kwargs = {k:v if isinstance(v, str) else json.dumps(v) for k,v in kwargs.items()}
+        return self._http_client.get(self._url, **kwargs)
+
+    def find(self, query={}, projection={}, sort="", max_results=25, page_number=1):
         """Find documents in the remote resource that match a mongodb query.
 
         Args:
             query (dict, optional): Mongo query. Defaults to {}.
             projection (dict, optional): Mongo projection. Defaults to {}.
+            sort (Union[string, list[tuple]], optional): Sorting either string as e.g:
+                                 city,-lastname or list as e.g: [("city", 1), ("lastname", -1)]
             max_results (int, optional): Items per page. Defaults to 25.
             page_number (int, optional): page to return if query returns more than max_results.\
                                          Defaults to 1.
@@ -242,81 +331,74 @@ class EveResource(EveModelBase):
         Returns:
             list: requested page documents that match query
         """
-        resp = self._http_client.get(self._url,
-                                     where=json.dumps(query),
-                                     projection=json.dumps(projection),
-                                     max_results=max_results,
-                                     page=page_number)
+
+        resp = self.get(where=query,
+                        projection=projection,
+                        sort=sort,
+                        max_results=max_results,
+                        page=page_number)
         docs = []
         if resp and "_items" in resp:
             docs = resp["_items"]
         return docs
 
-    def find_page(self,
-                  query={},
-                  projection={},
-                  max_results=25,
-                  page_number=1):
-        """Same as find() only returns an EvePage instance
-
-        Args:
-            query (dict, optional): [description]. Defaults to {}.
-            projection (dict, optional): [description]. Defaults to {}.
-            max_results (int, optional): [description]. Defaults to 25.
-            page_number (int, optional): [description]. Defaults to 1.
-
-        Returns:
-            EvePage: requested page from all items that match the query
+    def find_page(self, **kwargs):
+        """Same as :meth:`eve_panel.EveResource.find()`, only returns an EvePage instance
         """
-        docs = self.find(query=query,
-                         projection=projection,
-                         max_results=max_results,
-                         page_number=page_number)
+        docs = self.find(**kwargs)
         items = [self.make_item(**doc) for doc in docs]
+        page_number = kwargs.get("page_number", self.page_number)
         page = EvePage(
             name=f'{self._url.replace("/", ".")} page {page_number}',
             _items={item._id: item
                     for item in items},
-            _columns=self.columns)
+            fields=self.fields)
         return page
 
-    def find_df(self, query={}, projection={}, max_results=25, page_number=1):
-        """Same as find() only returns a pandas dataframe
+    def find_df(self, **kwargs):
+        """Same as :meth:`eve_panel.EveResource.find()`, only returns a pandas dataframe
 
-        Args:
-            query (dict, optional): [description]. Defaults to {}.
-            projection (dict, optional): [description]. Defaults to {}.
-            max_results (int, optional): [description]. Defaults to 25.
-            page_number (int, optional): [description]. Defaults to 1.
-
-        Returns:
-            [type]: [description]
         """
-        page = self.find_page(query=query,
-                              projection=projection,
-                              max_results=max_results,
-                              page_number=page_number)
+        page = self.find_page(**kwargs)
         df = page.to_dataframe()
         if "_id" in df.columns:
             df = df.set_index("_id")
         return df
 
-    def find_one(self, query: dict={}, projection: dict={}):
+    def find_one(self, query: dict={}, projection: dict={}) -> dict:
+        """Find the first document that matches the query,
+                 optionally project only given fields.
+
+        Args:
+            query (dict, optional): Mongo qury to perform. Defaults to {}.
+            projection (dict, optional): Mopngo projection. Defaults to {}.
+
+        Returns:
+            Union[dict, None]: If document found, returns it. If not returns None.
+        """
         docs = self.find(query=query, projection=projection, max_results=1)
         if docs:
             return docs[0]
 
-    def find_one_item(self, query={}, projection={}):
-        doc = self.find_one(query=query, projection=projection)
+    def find_one_item(self, **kwargs):
+        doc = self.find_one(**kwargs)
         if doc:
             return self.make_item(**doc)
 
-    def validate_documents(self, docs):
+    def validate_documents(self, docs: List[Dict]) -> Tuple:
+        """Validates documents against resource schema
+
+        Args:
+            docs (list[dict]): list of documents to insert
+
+        Returns:
+            tuple[list,list,list]: tuple of documents lists: (valid, rejected, errors) 
+        """
         schema = {
             name:
             {k: v
              for k, v in field.items() if k in SUPPORTED_SCHEMA_FIELDS}
-            for name, field in self._schema.items()
+            for name, field in self.schema.items()
         }
         v = Validator(schema)
         valid = []
@@ -340,6 +422,7 @@ class EveResource(EveModelBase):
         Args:
             docs (list): Documents to insert.
             validate (bool, optional): whether to validate schema of docs locally. Defaults to True.
+            dry (bool, optional): Enable dry run, will validate but not insert documents into DB. Defaults to False.
 
         Raises:
             TypeError: raised if docs is not the correct type.
@@ -366,9 +449,20 @@ class EveResource(EveModelBase):
         return success, rejected, errors
 
     def clear_upload_buffer(self):
+        """Discards the current upload buffer.
+        """
         self.paste_bin.value = ""
 
     def flush_buffer(self, dry=False):
+        """Attempts to insert docs in current upload buffer.
+
+        Args:
+            dry (bool, optional): Only validate docs with actually inserting them to DB.
+                                Defaults to False.
+
+        Returns:
+            list: List of succesfully inserted documents.
+        """
         try:
             docs = json.loads(self.paste_bin.value)
         except:
@@ -389,6 +483,7 @@ class EveResource(EveModelBase):
             return False
         page = self.find_page(query=self.filters,
                               projection=self.projection,
+                              sort=",".join(self.sorting),
                               max_results=self.items_per_page,
                               page_number=idx)
         if page._items:
@@ -402,24 +497,23 @@ class EveResource(EveModelBase):
         self._cache[idx].push()
 
     def get_page(self, idx):
-        for _ in range(100):
-            if self._http_client._busy:
-                time.sleep(0.2)
-            else:
-                break
+        # for _ in range(100):
+        #     if self._http_client._busy:
+        #         time.sleep(0.2)
+        #     else:
+        #         break
         if idx not in self._cache or not len(self._cache[idx]):
             self.pull_page(idx)
         return self._cache.get(
-            idx, EvePage(name="Place holder", _columns=self.columns))
+            idx, EvePage(name="Place holder", fields=self.fields))
 
     def get_page_records(self, idx):
         return self.get_page(idx).to_records()
 
-    def get_page_df(self, idx):
+    def get_page_df(self, idx, fields=None):
         df = self.get_page(idx).to_dataframe()
-        df = df[[col for col in self.columns if col in df.columns]]
-        if "_id" in df.columns:
-            df = df.set_index("_id")
+        # if "_id" in df.columns and set_index:
+        #     df = df.set_index("_id")
         return df
 
     def increment_page(self):
@@ -445,7 +539,8 @@ class EveResource(EveModelBase):
 
     @param.depends("items_per_page",
                    "filters",
-                   "columns",
+                   "fields",
+                   "sorting",
                    watch=True)
     def clear_cache(self):
         self._cache = EvePageCache()
@@ -453,6 +548,8 @@ class EveResource(EveModelBase):
     def reload_page(self, page_number=None):
         if page_number is None:
             page_number = self.page_number
+        if page_number in self._cache:
+            self._cache.pop(page_number)
         self.pull_page(page_number)
         self._cache = self._cache
 
@@ -460,59 +557,145 @@ class EveResource(EveModelBase):
         return self[_id].delete()
 
     def filter(self, **filters):
-        return self.clone(filters=filters)
+        """Filter resource, filters can be any valid mongodb query parameters.
 
-    def project(self, **projection):
-        value_sum = sum(list(projection.values()))
+        Returns:
+            EveResource: Filtered resource.
+        """
+        filtered = self.clone(filters=filters)
+        filtered.clear_cache()
+        return filtered
+
+    def project(self, *fields, **projection):
+        """Project resource (only fetch some of the fields.)
+
+        Raises:
+            ValueError: raised if passed inconsistent projections.
+
+        Returns:
+            EveResource: Projected resource.
+        """
+        projections ={col:1 for col in fields if col in self.schema}
+        projections.update(projection)
+        value_sum = sum(list(projections.values()))
         if value_sum==0:
-            columns = [c for c in self._schema if c not in projection]
-        elif value_sum==len(projection):
-            columns = list(projection)
+            fields = [c for c in self.schema if c not in projections]
+        elif value_sum==len(projections):
+            fields = list(projections)
         else:
             raise ValueError("Mongo projections can either be inclusive or exclusive but not both.")
-        return self.clone(columns=columns)
+        projected =  self.clone(fields=fields)
+        projected.clear_cache()
+        return projected
+
+    def sort(self, *fields):
+        """Sort data by given fields,
+                     fields starting with `-` will be sorted in descending order.
+        """
+        sorted_ = self.clone(sorting=[col for col in fields if col in self.sorting_options])
+        sorted_.clear_cache()
+        return sorted_
+
+    def paginate(self, page_size: int):
+        """Change how many items will be in each page.
+
+        Args:
+            page_size (int): number of items per page
+
+        Returns:
+            EveResource: Paginated EveResource
+        """
+        paginated = self.clone(items_per_page=page_size)
+        paginated.clear_cache()
+        return paginated
+
+    def pprint_schema(self):
+        """Pretty print the schema in nice yaml format 
+        """
+        print(yaml.dump(self.schema))
+
+    @property
+    def plot(self):
+        """
+        Shamelessly copied from the amazing Intake package.
+        Returns a hvPlot object to provide a high-level plotting API.
+        To display in a notebook, be sure to run ``panel_eve.output_notebook()``
+        first.
+        """
+        try:
+            from hvplot import hvPlot
+        except ImportError:
+            raise ImportError("The eve_panel plotting API requires hvplot."
+                              "hvplot may be installed with:\n\n"
+                              "`conda install -c pyviz hvplot` or "
+                              "`pip install hvplot`.")
+        try:
+            import dask
+            data = self.to_dask(clone=False)
+        except ImportError:
+            data = self.df
+        metadata = self.metadata.get('plot', {})
+        fields = self.metadata.get('fields', {})
+        for attrs in fields.values():
+            if 'range' in attrs:
+                attrs['range'] = tuple(attrs['range'])
+        metadata['fields'] = fields
+        plots = self.metadata.get('plots', {})
+        return hvPlot(data, custom_plots=plots, **metadata)
+
+    @property
+    def plots(self):
+        return list(self.metadata.get('plots', {}))
 
     @param.depends("_url")
     def upload_view(self):
         clear_button = pn.widgets.Button(name="Clear buffer",
                                          button_type="warning",
                                          width_policy='max',
-                                         sizing_mode='stretch_width',
-                                         max_width=int(settings.GUI_WIDTH / 4))
+                                         sizing_mode=self.sizing_mode,
+                                         width=int(self.max_width/4),
+                                         max_width=int(self.max_width/3),
+                                         )
         clear_button.on_click(lambda event: self.clear_upload_buffer())
 
         upload_file = pn.widgets.FileInput(accept=",".join(
             [f".{ext}" for ext in FILE_READERS]),
-                                           max_width=int(settings.GUI_WIDTH / 4))
+                                           width=int(self.max_width/4),
+                                           max_width=int(self.max_width/3),
+                                           )
         upload_file.link(self, filename="_filename", value="_file_buffer")
         upload_file_button = pn.widgets.Button(name="Read file",
                                                button_type="primary",
                                                width_policy='max',
-                                               sizing_mode='stretch_width',
-                                               max_width=int(settings.GUI_WIDTH /
-                                                         4))
+                                               sizing_mode=self.sizing_mode,
+                                               width=int(self.max_width/4),
+                                               max_width=int(self.max_width/3),
+                                               )
         upload_file_button.on_click(lambda event: self._read_file_buffer())
 
         upload_button = pn.widgets.Button(name="Insert to DB",
                                           button_type="success",
                                           width_policy='max',
-                                          sizing_mode='stretch_width',
-                                          max_width=int(settings.GUI_WIDTH / 4))
+                                          sizing_mode=self.sizing_mode,
+                                          width=int(self.max_width/4),
+                                          max_width=int(self.max_width/3),
+                                          )
         upload_button.on_click(lambda event: self.flush_buffer())
         read_clipboard_button = pn.widgets.Button(name="Read Clipboard",
                                                   button_type="primary",
                                                   width_policy='max',
-                                                  sizing_mode='stretch_width',
-                                                  max_width=int(
-                                                      settings.GUI_WIDTH / 4))
+                                                  sizing_mode=self.sizing_mode,
+                                                  width=int(self.max_width/4),
+                                                  max_width=int(self.max_width/3),
+                                                  )
         read_clipboard_button.on_click(lambda event: self.read_clipboard())
 
         validate_button = pn.widgets.Button(name="Validate",
                                                   button_type="primary",
                                                   width_policy='max',
-                                                  sizing_mode='stretch_width',
-                                                  max_width=int(
-                                                      settings.GUI_WIDTH / 4))
+                                                  sizing_mode=self.sizing_mode,
+                                                  width=int(self.max_width/4),
+                                                  )
         validate_button.on_click(lambda event: self.flush_buffer(dry=True))
 
         first_row_buttons = pn.Row(upload_file, upload_file_button, read_clipboard_button)
@@ -535,8 +718,9 @@ class EveResource(EveModelBase):
             pn.pane.Alert(err, alert_type="danger",
             margin=2,
             width_policy='max',
-            sizing_mode='stretch_width',
-            max_width=int(settings.GUI_WIDTH - 30)
+            sizing_mode=self.sizing_mode,
+            width=self.max_width-30,
+            max_width=self.max_width,
             )
             for err in self.upload_errors
         ]
@@ -544,8 +728,8 @@ class EveResource(EveModelBase):
                          scroll=True,
                          max_height=300,
                          width_policy='max',
-                         sizing_mode='stretch_width',
-                         max_width=int(settings.GUI_WIDTH - 30))
+                         sizing_mode=self.sizing_mode,
+                         max_width=self.max_width-30)
 
     @param.depends("current_page")
     def download_view(self):
@@ -558,17 +742,51 @@ class EveResource(EveModelBase):
         download_button = pn.widgets.FileDownload(callback=cb, label="Download JSON", filename=f'{self.name}_page{page_num_select.value}.json')
         return pn.Column(page_num_select, download_button )
 
+    @param.depends("_plot_selection")
+    def selected_plot_view(self):
+        if self._plot_selection in self.plots:
+            plot = getattr(self.plot, self._plot_selection)()
+            return pn.panel(plot)
+        else:
+            return pn.Column("# No plot selected.")
+
     def make_panel(self, show_client=True, tabs_location='above'):
-        column_select = pn.Param(self.param.columns,
+        plot_selector = pn.Param(self.param._plot_selection,
+        widgets={"_plot_selection":{"type": pn.widgets.Select,
+                                    "options": ["None"]+self.plots}},
+                                width_policy='max',
+                                sizing_mode='stretch_width',
+                                width=int(self.max_width/4),
+                                max_width=int(self.max_width/3),
+                                )
+        plotting = pn.Column(plot_selector,
+                             self.selected_plot_view,
+                             width_policy='max',
+                             sizing_mode='stretch_width',
+                             max_width=int(self.max_width - 30),
+                             )
+
+        column_select = pn.Param(self.param.fields,
                             width_policy='max',
                             sizing_mode='stretch_width',
-                            max_width=int(settings.GUI_WIDTH - 30),
+                            max_width=int(self.max_width - 30),
                             widgets={
-                                "columns": {
+                                "fields": {
                                     "type": pn.widgets.MultiChoice,
-                                    "options": list(self._schema) +
-                                    settings.META_COLUMNS,
-                                    "width": int(settings.GUI_WIDTH - 30)
+                                    "options": self.field_options,
+                                    "width": int(self.max_width - 30)
+                                }
+                            })
+
+        sorting_select = pn.Param(self.param.sorting,
+                            width_policy='max',
+                            sizing_mode='stretch_width',
+                            max_width=int(self.max_width - 30),
+                            widgets={
+                                "sorting": {
+                                    "type": pn.widgets.MultiChoice,
+                                    "options": self.sorting_options,
+                                    "width": int(self.max_width - 30)
                                 }
                             })
 
@@ -576,10 +794,11 @@ class EveResource(EveModelBase):
                                          self.param.filters,
                                          self.param._page_view_format,
                                          width_policy='max',
-                                         sizing_mode='stretch_width',
-                                         max_width=int(settings.GUI_WIDTH - 50)),
+                                         sizing_mode=self.sizing_mode,
+                                         max_width=int(self.max_width - 50)),
                                   column_select,
-                                  max_width=int(settings.GUI_WIDTH - 10))
+                                  sorting_select,
+                                  max_width=int(self.max_width - 10))
         if show_client:
             page_settings.append("### HTTP client")
             page_settings.append(pn.layout.Divider())
@@ -588,6 +807,7 @@ class EveResource(EveModelBase):
 
         tabs = pn.Tabs(
                 ("Data", self.current_page_view),
+                ("Plots", plotting),
                 ("Upload", self.upload_view()),
                 ("Download", self.download_view),
                 ("Config", page_settings),
@@ -595,20 +815,23 @@ class EveResource(EveModelBase):
                 dynamic=False,
                 tabs_location=tabs_location,
                 width_policy='max',
-                sizing_mode='stretch_width',
-                max_width=int(settings.GUI_WIDTH),
+                sizing_mode=self.sizing_mode,
+                max_width=self.max_width-20,
             )
 
         buttons = pn.Param(self.param,
                            parameters=[
                                "_prev_page_button", "page_number",
-                               "_reload_page_button", "_next_page_button"
+                               "_reload_page_button", "_next_page_button",
+                               "_clear_cache_button",
                            ],
                            default_layout=pn.Row,
                            name="",
                            width_policy='max',
-                           sizing_mode='stretch_width',
-                           max_width=int(settings.GUI_WIDTH / 3))
+                           sizing_mode=self.sizing_mode,
+                           width=int(self.max_width/2),
+                           min_width=300,
+                           max_width=int(self.max_width/1.5))
 
         header = pn.Row(
             f'## {self.name.replace("_", " ").title()} resource',
@@ -624,8 +847,10 @@ class EveResource(EveModelBase):
             header, 
             tabs,
             width_policy='max',
-            sizing_mode='stretch_width',
-            max_width=int(settings.GUI_WIDTH),
+            sizing_mode=self.sizing_mode,
+            width=self.max_width-20,
+            max_width=self.max_width,
+            max_height=self.max_height,
             )
 
         return view

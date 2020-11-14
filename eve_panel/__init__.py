@@ -29,11 +29,13 @@ from .menu import Menu, css
 from .web_client import EveWebClient
 
 
-def notebook():
-    """ Load notebook support. """
-    return pn.extension('ace')
-
 def extension():
    pn.extension('ace')
    pn.config.raw_css.append(css)
-   
+   try:
+      import holoviews as hv
+      hv.extension('bokeh')
+   except ImportError:
+      print("Cannot import holoviews, plotting will not work.")
+
+notebook = output_notebook = extension

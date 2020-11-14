@@ -1,4 +1,5 @@
 import json
+import time
 
 import eve
 import httpx
@@ -61,6 +62,9 @@ class EveHttpxClient(EveHttpClient):
     _log = param.String()
     _messages = param.List(default=[])
     _busy = param.Boolean(False)
+    _client_ttl = param.Integer(600)
+    _client_created = param.Number(0)
+    _client = None
 
     @classmethod
     def from_app_settings(cls, settings, urls=None):
@@ -85,6 +89,15 @@ class EveHttpxClient(EveHttpClient):
             APPS[self.name] = eve.Eve(settings=self._app_settings)
         return APPS.get(self.name, None)
 
+    @property
+    def client(self):
+        if self._client is None or (time.time() - self._client_created) > self._client_ttl:
+            if self._client:
+                self._client.close()
+            self._client = httpx.Client(app=self.app, base_url=self.server_url)
+            self._client_created = time.time()
+        return self._client
+
     def headers(self):
         headers = self.auth.get_headers()
         headers["Accept"] = "application/json"
@@ -92,22 +105,22 @@ class EveHttpxClient(EveHttpClient):
         return headers
 
     def get(self, url, timeout=10, **params):
-        with httpx.Client(app=self.app, base_url=self.server_url) as client:
-            self._busy = True
-            try:
-                resp = client.get(url,
-                                  params=params,
-                                  headers=self.headers(),
-                                  timeout=timeout)
-                self._busy = False
-                if resp.is_error:
-                    self.log_error(resp.text)
-                else:
-                    self.clear_messages()
-                    return resp.json()
-            except Exception as e:
-                self.log_error(e)
+        # with httpx.Client(app=self.app, base_url=self.server_url) as client:
+        self._busy = True
+        try:
+            resp = self.client.get(url,
+                                params=params,
+                                headers=self.headers(),
+                                timeout=timeout)
             self._busy = False
+            if resp.is_error:
+                self.log_error(resp.text)
+            else:
+                self.clear_messages()
+                return resp.json()
+        except Exception as e:
+            self.log_error(e)
+        self._busy = False
         return []
 
     def post(self, url, data="", json={}, timeout=10):
@@ -249,6 +262,7 @@ class EveHttpxClient(EveHttpClient):
         return pn.Column(self.auth.panel,
                          settings,
                          width_policy='max',
+                         height=self.max_height,
                          sizing_mode='stretch_width',
                          )
 

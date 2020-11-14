@@ -51,10 +51,20 @@ class EveClient(EveModelBase):
         if not domains:
             return pn.Column("### No Domains configured.")
         if len(domains)>1:
-            return pn.Tabs(*domains, dynamic=True)
+            return pn.Tabs(*domains,
+                 width=self.max_width,
+                 height=self.max_height,
+                 sizing_mode=self.sizing_mode,                
+                 dynamic=True)
         else:
             name, domain = domains[0]
-            return pn.Column(f"### {name}", domain)
+            return pn.Column(f"### {name}",
+                             domain,
+                             width=self.max_width,
+                             max_width=self.max_width,
+                             height=self.max_height,
+                             sizing_mode=self.sizing_mode,
+                             )
 
     def collect_domain_tree(self):
         return {k: v.collect_resource_tree() for k, v in self.domains.items()}
