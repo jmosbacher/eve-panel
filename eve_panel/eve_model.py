@@ -82,3 +82,8 @@ class EveModelBase(param.Parameterized):
                 v.propagate(**kwargs)
         self._panel = None
         return self
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state.pop("_panel", None)
+        return state

@@ -60,7 +60,7 @@ class EveResource(EveModelBase):
     fields = param.List(default=[], precedence=1)
     sorting = param.List(default=[], precedence=1)
 
-    items_per_page = param.Integer(default=25,
+    items_per_page = param.Integer(default=100,
                                    label="Items per page",
                                    precedence=1)
     _prev_page_button = param.Action(lambda self: self.decrement_page(),
@@ -81,6 +81,7 @@ class EveResource(EveModelBase):
                                      label="\u2672",
                                      precedence=5)
     _plot_selection = param.String("None")
+    _plot = param.Parameter(default=None)
 
     @classmethod
     def from_resource_def(cls,
@@ -159,11 +160,16 @@ class EveResource(EveModelBase):
                         projection={"_id": 1},
                         sort=self.sorting,
                         max_results=1,
-                        page=1)
+                        page=1,
+                        )
         if "_meta" in resp:
             return int(resp["_meta"].get("total", 0))
         else:
             raise ConnectionError("Unable to connect to server.")
+    
+    @property
+    def is_table(self):
+        return not any([v["type"] in ['list', 'dict'] for v in self.schema.values()])
 
     @property
     def page_options(self):
@@ -273,14 +279,14 @@ class EveResource(EveModelBase):
         return [item.to_dict() for item in self.values()]
 
     def to_dataframe(self):
-        df = pd.concat([page.to_dataframe() for page in self.values()])
+        df = pd.concat([page.to_dataframe() for page in self.pages()])
         if "_id" in df.columns:
             df = df.set_index("_id")
         return df
-
-    def to_dask(self, pages=None, clone=True):
+    
+    def to_dask(self, pages=None, persist=False, clone=True):
         try:
-            import dask.dataframe as dd
+            import dask
         except ImportError:
             raise RuntimeError("Dask is not installed.")
         if clone:
@@ -289,15 +295,50 @@ class EveResource(EveModelBase):
             resource = self
         if pages is None:
             pages = resource.page_options
-        dsk = {(resource.name, i-1): (resource.get_page_df, i) for i in pages}
-        name = resource.name
-        nitems = resource.nitems
         columns = [(k, DASK_TYPE_MAPPING[v["type"]]) for k,v in resource.schema.items() 
                                     if k in self.fields and not k.startswith("_")]
+        column_types = dict(columns)
+
+        url = self._url
+        client_kwargs = self._http_client.get_client_kwargs()
+
+        def get_data(params):
+            import httpx
+            if client_kwargs["app"] is not None:
+                from eve import Eve
+                client_kwargs["app"] = Eve(settings=client_kwargs["app"])
+            items = []
+            with httpx.Client(**client_kwargs) as client:
+                try:
+                    resp = client.get(url, params=params, timeout=15)
+                    items = resp.json().get("_items", [])
+                except:
+                    pass
+            data = [{k:column_types[k](v) for k,v in item.items() if k in column_types} for item in items]
+            return data
+        
+        if not self.is_table:
+            import dask.bag as db
+            return db.from_sequence([self.get_page_kwargs(i) for i in pages]).map(get_data).flatten()
+
+        import dask.dataframe as dd
+        import pandas as pd
+        
+        def get_df(params):
+            data = get_data(params)
+            return pd.DataFrame(data, columns=list(column_types))
+
+        dsk = {(resource.name, i-1): (get_df, self.get_page_kwargs(i)) for i in pages}
+        name = resource.name
+        nitems = resource.nitems
+        
         divisions = list(range(0, nitems, resource.items_per_page))
         if nitems not in divisions:
            divisions = divisions + [resource.nitems]
-        return dd.DataFrame(dsk, name, columns, divisions)
+        df = dd.DataFrame(dsk, name, columns, divisions)
+        if persist:
+            return df.persist()
+        return df
 
     def pull(self, start=1, end=None):
         for idx in itertools.count(start):
@@ -477,8 +518,8 @@ class EveResource(EveModelBase):
         self.upload_errors = [str(err) for err in errors]
         return success
 
-    def pull_page(self, idx=0):
-        if not idx:
+    def pull_page(self, idx=0, cache_result=True):
+        if not idx and cache_result:
             self._cache[idx] = PageZero()
             return False
         page = self.find_page(query=self.filters,
@@ -486,10 +527,20 @@ class EveResource(EveModelBase):
                               sort=",".join(self.sorting),
                               max_results=self.items_per_page,
                               page_number=idx)
-        if page._items:
+        if page._items and cache_result:
             self._cache[idx] = page
-            return True
-        return False
+        return page
+
+    def get_page_kwargs(self, idx):
+        kwargs =  dict(
+            where=self.filters,
+            projection=self.projection,
+            sort=",".join(self.sorting),
+            max_results=self.items_per_page,
+            page=idx
+        )
+        kwargs = {k:v if isinstance(v, str) else json.dumps(v) for k,v in kwargs.items()}
+        return kwargs
 
     def push_page(self, idx):
         if not idx in self._cache or len(self._cache[idx]):
@@ -497,11 +548,6 @@ class EveResource(EveModelBase):
         self._cache[idx].push()
 
     def get_page(self, idx):
-        # for _ in range(100):
-        #     if self._http_client._busy:
-        #         time.sleep(0.2)
-        #     else:
-        #         break
         if idx not in self._cache or not len(self._cache[idx]):
             self.pull_page(idx)
         return self._cache.get(
@@ -544,6 +590,7 @@ class EveResource(EveModelBase):
                    watch=True)
     def clear_cache(self):
         self._cache = EvePageCache()
+        self._plot = None
 
     def reload_page(self, page_number=None):
         if page_number is None:
@@ -622,26 +669,29 @@ class EveResource(EveModelBase):
         To display in a notebook, be sure to run ``panel_eve.output_notebook()``
         first.
         """
-        try:
-            from hvplot import hvPlot
-        except ImportError:
-            raise ImportError("The eve_panel plotting API requires hvplot."
-                              "hvplot may be installed with:\n\n"
-                              "`conda install -c pyviz hvplot` or "
-                              "`pip install hvplot`.")
-        try:
-            import dask
-            data = self.to_dask(clone=False)
-        except ImportError:
-            data = self.df
-        metadata = self.metadata.get('plot', {})
-        fields = self.metadata.get('fields', {})
-        for attrs in fields.values():
-            if 'range' in attrs:
-                attrs['range'] = tuple(attrs['range'])
-        metadata['fields'] = fields
-        plots = self.metadata.get('plots', {})
-        return hvPlot(data, custom_plots=plots, **metadata)
+        if self._plot is None:
+            try:
+                from hvplot import hvPlot
+            except ImportError:
+                raise ImportError("The eve_panel plotting API requires hvplot."
+                                "hvplot may be installed with:\n\n"
+                                "`conda install -c pyviz hvplot` or "
+                                "`pip install hvplot`.")
+            try:
+                import dask
+                # persist = self.nitems<1500
+                data = self.to_dask(persist=True, clone=False)
+            except ImportError:
+                data = self.df
+            metadata = self.metadata.get('plot', {})
+            fields = self.metadata.get('fields', {})
+            for attrs in fields.values():
+                if 'range' in attrs:
+                    attrs['range'] = tuple(attrs['range'])
+            metadata['fields'] = fields
+            plots = self.metadata.get('plots', {})
+            self._plot = hvPlot(data, custom_plots=plots, **metadata)
+        return self._plot
 
     @property
     def plots(self):
@@ -854,3 +904,4 @@ class EveResource(EveModelBase):
             )
 
         return view
+    

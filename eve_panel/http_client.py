@@ -97,7 +97,19 @@ class EveHttpxClient(EveHttpClient):
             self._client = httpx.Client(app=self.app, base_url=self.server_url)
             self._client_created = time.time()
         return self._client
+    
+    def get_client_kwargs(self):
+        kwargs = {
+            "headers": self.headers(),
+            "base_url": self.server_url,
+            "app": None,
+        }
+        if self._self_serve:
+            kwargs["app"] = self._app_settings
+        
+        return kwargs
 
+    
     def headers(self):
         headers = self.auth.get_headers()
         headers["Accept"] = "application/json"
@@ -122,7 +134,7 @@ class EveHttpxClient(EveHttpClient):
             self.log_error(e)
         self._busy = False
         return []
-
+     
     def post(self, url, data="", json={}, timeout=10):
         with httpx.Client(app=self.app, base_url=self.server_url) as client:
             self._busy = True
@@ -266,5 +278,9 @@ class EveHttpxClient(EveHttpClient):
                          sizing_mode='stretch_width',
                          )
 
+    def __getstate__(self):
+        state = super().__getstate__() 
+        state.pop("_client", None)
+        return state
 
 DEFAULT_HTTP_CLIENT = EveHttpxClient

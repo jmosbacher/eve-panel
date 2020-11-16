@@ -27,7 +27,7 @@ def EveField(name, schema, klass):
     if not isinstance(klass, type):
         return klass
     schema = {k: v for k, v in schema.items() if k in SUPPORTED_SCHEMA_FIELDS}
-    validator = Validator({"value": schema})
+    # validator = Validator({"value": schema})
 
     def _validate(self, val):
         if self.allow_None and val is None:
@@ -36,6 +36,8 @@ def EveField(name, schema, klass):
             return
         if self.name is None:
             return
+        
+        validator = Validator({"value": self._schema})
         if not validator.validate({"value": val}):
             sep = "\n"
             errors = [
@@ -48,6 +50,7 @@ def EveField(name, schema, klass):
             raise ValueError(" ".join(errors))
 
     params = {
+        "_schema": schema,
         "_validate": _validate,
     }
 
