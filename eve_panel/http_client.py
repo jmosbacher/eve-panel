@@ -109,7 +109,6 @@ class EveHttpxClient(EveHttpClient):
         
         return kwargs
 
-    
     def headers(self):
         headers = self.auth.get_headers()
         headers["Accept"] = "application/json"
@@ -189,7 +188,7 @@ class EveHttpxClient(EveHttpClient):
                                     headers=headers,
                                     timeout=timeout)
                 self._busy = False
-                if resp.is_error:
+                if resp.is_error or settings.DEBUG:
                     self.log_error(resp.text)
                     return False
                 else:

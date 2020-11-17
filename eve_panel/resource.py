@@ -9,6 +9,7 @@ import yaml
 import typing
 import math
 from typing import Union, List, Dict, Tuple
+import multiprocessing as mp
 
 from . import settings
 from .eve_model import EveModelBase
@@ -17,7 +18,7 @@ from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from .item import EveItem
 from .page import EvePage, EvePageCache, PageZero
 from .io import FILE_READERS, read_data_file
-from .types import DASK_TYPE_MAPPING
+from .types import DASK_TYPE_MAPPING, COERCERS
 
 try:
     from ruamel.yaml import YAML
@@ -158,7 +159,6 @@ class EveResource(EveModelBase):
     def nitems(self):
         resp = self.get(where=self.filters,
                         projection={"_id": 1},
-                        sort=self.sorting,
                         max_results=1,
                         page=1,
                         )
@@ -327,15 +327,14 @@ class EveResource(EveModelBase):
         def get_df(params):
             data = get_data(params)
             return pd.DataFrame(data, columns=list(column_types))
-
-        dsk = {(resource.name, i-1): (get_df, self.get_page_kwargs(i)) for i in pages}
-        name = resource.name
+        dask_name = str(hash((resource.name, )+tuple(self.get_page_kwargs(1).values())))
+        dsk = {(dask_name, i-1): (get_df, self.get_page_kwargs(i)) for i in pages}
         nitems = resource.nitems
         
         divisions = list(range(0, nitems, resource.items_per_page))
         if nitems not in divisions:
            divisions = divisions + [resource.nitems]
-        df = dd.DataFrame(dsk, name, columns, divisions)
+        df = dd.DataFrame(dsk, dask_name, columns, divisions)
         if persist:
             return df.persist()
         return df
@@ -355,6 +354,8 @@ class EveResource(EveModelBase):
 
     def get(self, **kwargs):
         kwargs = {k:v if isinstance(v, str) else json.dumps(v) for k,v in kwargs.items()}
+        default_timeout = 5+int(kwargs.get("max_results", 100))*0.05
+        kwargs["timeout"] = kwargs.get("timeout", default_timeout)
         return self._http_client.get(self._url, **kwargs)
 
     def find(self, query={}, projection={}, sort="", max_results=25, page_number=1):
@@ -426,7 +427,7 @@ class EveResource(EveModelBase):
         if doc:
             return self.make_item(**doc)
 
-    def validate_documents(self, docs: List[Dict]) -> Tuple:
+    def validate_documents(self, docs: List[Dict], coerce=True) -> Tuple:
         """Validates documents against resource schema
 
         Args:
@@ -441,13 +442,17 @@ class EveResource(EveModelBase):
              for k, v in field.items() if k in SUPPORTED_SCHEMA_FIELDS}
             for name, field in self.schema.items()
         }
+        if coerce:
+            for sch in schema.values():
+                if sch["type"] in COERCERS:
+                    sch["coerce"] = COERCERS[sch["type"]]
         v = Validator(schema)
         valid = []
         rejected = []
         errors = []
         for doc in docs:
             if v.validate(doc):
-                valid.append(doc)
+                valid.append(v.document)
             else:
                 rejected.append(doc)
                 errors.append(v.errors)
@@ -455,7 +460,7 @@ class EveResource(EveModelBase):
 
     def post(self, docs):
         data = json.dumps(docs)
-        return self._http_client.post(self._url, data=data)
+        return self._http_client.post(self._url, data=data, timeout=int(5+len(docs)*0.1))
 
     def insert_documents(self, docs: Union[list, tuple, dict], validate=True, dry=False) -> tuple:
         """Insert documents into the database
@@ -632,7 +637,7 @@ class EveResource(EveModelBase):
         else:
             raise ValueError("Mongo projections can either be inclusive or exclusive but not both.")
         projected =  self.clone(fields=fields)
-        projected.clear_cache()
+        # projected.clear_cache()
         return projected
 
     def sort(self, *fields):
@@ -640,7 +645,7 @@ class EveResource(EveModelBase):
                      fields starting with `-` will be sorted in descending order.
         """
         sorted_ = self.clone(sorting=[col for col in fields if col in self.sorting_options])
-        sorted_.clear_cache()
+        # sorted_.clear_cache()
         return sorted_
 
     def paginate(self, page_size: int):
@@ -653,7 +658,7 @@ class EveResource(EveModelBase):
             EveResource: Paginated EveResource
         """
         paginated = self.clone(items_per_page=page_size)
-        paginated.clear_cache()
+        
         return paginated
 
     def pprint_schema(self):
@@ -661,14 +666,24 @@ class EveResource(EveModelBase):
         """
         print(yaml.dump(self.schema))
 
+    def clone(self, **kwargs):
+        c = super().clone(**kwargs)
+        c.clear_cache()
+        return c
+
     @property
     def plot(self):
         """
-        Shamelessly copied from the amazing Intake package.
-        Returns a hvPlot object to provide a high-level plotting API.
+        Shamelessly copied from the amazing Intake package and modified slightly.
+        Returns a hvPlot object to provide a high-level plotting API. Will use Dask
+        if available, reading parralelism is set by page size and then data is repartitioned by number 
+        of cpus available. small collections are pre-read and converted to regular pandas dataframe.
         To display in a notebook, be sure to run ``panel_eve.output_notebook()``
         first.
         """
+        if not self.is_table:
+            raise TypeError("Plotting API currently only supports tabular data.")
+
         if self._plot is None:
             try:
                 from hvplot import hvPlot
@@ -679,8 +694,12 @@ class EveResource(EveModelBase):
                                 "`pip install hvplot`.")
             try:
                 import dask
+                nitems = self.nitems
                 # persist = self.nitems<1500
                 data = self.to_dask(persist=True, clone=False)
+                data = data.repartition(npartitions=min(data.npartitions, mp.cpu_count()))
+                if nitems<2000:
+                    data = data.compute()
             except ImportError:
                 data = self.df
             metadata = self.metadata.get('plot', {})

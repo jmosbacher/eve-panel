@@ -51,8 +51,8 @@ numpydoc = "*"
 
 [tool.poetry.extras]
 dask = ["dask"]
-plotting = ["hvplot"]
-full = ["dask", "hvplot"]
+plotting = ["hvplot", "xarray"]
+full = ["dask", "hvplot", "xarray"]
 
 [tool.dephell.main]
 versioning = "semver"

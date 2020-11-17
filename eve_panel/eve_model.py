@@ -87,3 +87,6 @@ class EveModelBase(param.Parameterized):
         state = super().__getstate__()
         state.pop("_panel", None)
         return state
+
+    def __repr__(self):
+        return self.name

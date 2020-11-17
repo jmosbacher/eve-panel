@@ -36,22 +36,21 @@ def EveField(name, schema, klass):
             return
         if self.name is None:
             return
-        
-        validator = Validator({"value": self._schema})
-        if not validator.validate({"value": val}):
+        if not self.validator.validate({"value": val}):
             sep = "\n"
             errors = [
                 f"Cannot set \'{self.owner.name}.{self.name}\' to \'{val}\' of type {type(val)}."
             ]
-            for k, v in validator.errors.items():
+            for k, v in self.validator.errors.items():
                 errors.append(f"{k} {v}")
             if len(errors) <= 2:
                 sep = ". "
             raise ValueError(" ".join(errors))
 
     params = {
-        "_schema": schema,
+        # "_schema": schema,
         "_validate": _validate,
+        "validator": Validator({"value": schema})
     }
 
     return type(f"Eve{name.title()}{klass.__name__}Field", (klass, ), params)

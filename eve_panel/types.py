@@ -56,3 +56,19 @@ DASK_TYPE_MAPPING = {
     "media": bytes,
 
 }
+
+COERCERS = {
+    "objectid": str,
+    "boolean": bool,
+    "binary": bytes,
+    "date": np.datetime64,
+    "datetime": np.datetime64,
+    "dict": dict,
+    "float": float,
+    "integer": int,
+    "list": list,
+    "number": float,
+    "set": set,
+    "string": str,
+    "media": bytes,
+}
