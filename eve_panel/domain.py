@@ -10,7 +10,7 @@ from collections import defaultdict
 import panel as pn
 import param
 
-from . import settings
+from .settings import config as settings
 from .eve_model import EveModelBase
 from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from .resource import EveResource

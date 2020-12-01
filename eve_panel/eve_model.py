@@ -8,7 +8,7 @@ import panel as pn
 import param
 from copy import copy
 
-from . import settings
+from .settings import config as settings
 
 
 class DefaultLayout(pn.GridBox):

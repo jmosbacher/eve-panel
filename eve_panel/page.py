@@ -4,7 +4,7 @@ import pandas as pd
 import panel as pn
 import param
 
-from . import settings
+from .settings import config as settings
 from .eve_model import EveModelBase
 from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from .item import EveItem
@@ -110,7 +110,7 @@ class EvePage(EveModelBase):
                             width=self.max_width,
                             height=int(settings.GUI_HEIGHT - 30))
 
-    def panel(self):
+    def make_panel(self):
         tabs = pn.Tabs(("Table", self.table_view),
                        ("Widgets", self.widgets_view),
                        ("JSON", self.json_view),
@@ -127,7 +127,6 @@ class EvePage(EveModelBase):
                 sizing_mode='stretch_width',
                 max_width=self.max_width,
                 width=self.max_width,)
-
 
 class PageZero(EvePage):
     @param.depends("_items")

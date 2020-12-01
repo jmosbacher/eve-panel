@@ -11,7 +11,7 @@ import math
 from typing import Union, List, Dict, Tuple
 import multiprocessing as mp
 
-from . import settings
+from .settings import config as settings
 from .eve_model import EveModelBase
 from .field import SUPPORTED_SCHEMA_FIELDS, Validator
 from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
@@ -118,7 +118,10 @@ class EveResource(EveModelBase):
                       _resource_def=resource,
                       schema=schema,
                       fields=list(schema))
-        return cls(**params)
+        instance = cls(**params)
+        if not instance.is_tabular:
+            instance._page_view_format = "JSON"
+        return instance
 
     def __getitem__(self, key):
         if key in self._cache:
@@ -168,7 +171,7 @@ class EveResource(EveModelBase):
             raise ConnectionError("Unable to connect to server.")
     
     @property
-    def is_table(self):
+    def is_tabular(self):
         return not any([v["type"] in ['list', 'dict'] for v in self.schema.values()])
 
     @property
@@ -263,9 +266,7 @@ class EveResource(EveModelBase):
             yield from page.records()
 
     def pages(self, start=1, end=None):
-        for idx in itertools.count(start):
-            if end is not None and idx > end:
-                break
+        for idx in self.page_options:
             page = self.get_page(idx)
             if not len(page):
                 break
@@ -284,18 +285,15 @@ class EveResource(EveModelBase):
             df = df.set_index("_id")
         return df
     
-    def to_dask(self, pages=None, persist=False, clone=True):
+    def to_dask(self, pages=None, persist=False):
         try:
             import dask
         except ImportError:
             raise RuntimeError("Dask is not installed.")
-        if clone:
-            resource = self.clone()
-        else:
-            resource = self
+
         if pages is None:
-            pages = resource.page_options
-        columns = [(k, DASK_TYPE_MAPPING[v["type"]]) for k,v in resource.schema.items() 
+            pages = self.page_options
+        columns = [(k, DASK_TYPE_MAPPING[v["type"]]) for k,v in self.schema.items() 
                                     if k in self.fields and not k.startswith("_")]
         column_types = dict(columns)
 
@@ -317,7 +315,7 @@ class EveResource(EveModelBase):
             data = [{k:column_types[k](v) for k,v in item.items() if k in column_types} for item in items]
             return data
         
-        if not self.is_table:
+        if not self.is_tabular:
             import dask.bag as db
             return db.from_sequence([self.get_page_kwargs(i) for i in pages]).map(get_data).flatten()
 
@@ -327,13 +325,14 @@ class EveResource(EveModelBase):
         def get_df(params):
             data = get_data(params)
             return pd.DataFrame(data, columns=list(column_types))
-        dask_name = str(hash((resource.name, )+tuple(self.get_page_kwargs(1).values())))
+        dask_name = str(hash((self.name, )+tuple(self.get_page_kwargs(1).values())))
         dsk = {(dask_name, i-1): (get_df, self.get_page_kwargs(i)) for i in pages}
-        nitems = resource.nitems
         
-        divisions = list(range(0, nitems, resource.items_per_page))
+        nitems = self.nitems
+        divisions = list(range(0, nitems, self.items_per_page))
         if nitems not in divisions:
-           divisions = divisions + [resource.nitems]
+           divisions = divisions + [nitems]
+        
         df = dd.DataFrame(dsk, dask_name, columns, divisions)
         if persist:
             return df.persist()
@@ -606,7 +605,19 @@ class EveResource(EveModelBase):
         self._cache = self._cache
 
     def remove_item(self, _id: str) -> bool:
+        """Remove a single item from the database.
+
+        Args:
+            _id (str): _id field of the item to be removed.
+
+        Returns:
+            bool: Whether item was removed succesfully.
+        """
         return self[_id].delete()
+    
+    def remove_items(self, *ids):
+        for _id in ids:
+            self.remove_item(_id)
 
     def filter(self, **filters):
         """Filter resource, filters can be any valid mongodb query parameters.
@@ -681,7 +692,7 @@ class EveResource(EveModelBase):
         To display in a notebook, be sure to run ``panel_eve.output_notebook()``
         first.
         """
-        if not self.is_table:
+        if not self.is_tabular:
             raise TypeError("Plotting API currently only supports tabular data.")
 
         if self._plot is None:
@@ -692,16 +703,19 @@ class EveResource(EveModelBase):
                                 "hvplot may be installed with:\n\n"
                                 "`conda install -c pyviz hvplot` or "
                                 "`pip install hvplot`.")
-            try:
-                import dask
-                nitems = self.nitems
-                # persist = self.nitems<1500
-                data = self.to_dask(persist=True, clone=False)
-                data = data.repartition(npartitions=min(data.npartitions, mp.cpu_count()))
-                if nitems<2000:
-                    data = data.compute()
-            except ImportError:
+            nitems = self.nitems
+            if nitems<self.items_per_page:
                 data = self.df
+            else:
+                try:
+                    import dask
+                    persist = (nitems/self.items_per_page)<mp.cpu_count()
+                    data = self.to_dask(persist=persist)
+                    data = data.repartition(npartitions=min(data.npartitions, mp.cpu_count()))
+                    if persist and nitems<1e4:
+                        data = data.compute()
+                except ImportError:
+                    data = self.df
             metadata = self.metadata.get('plot', {})
             fields = self.metadata.get('fields', {})
             for attrs in fields.values():

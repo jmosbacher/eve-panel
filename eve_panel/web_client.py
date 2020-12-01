@@ -94,7 +94,6 @@ class EveWebClient(param.Parameterized):
         super().__init__(**params)
 
     def template(self, **kwargs):
-        
         self.location = pn.state.location
         pn.config.raw_css.append(CSS)
         tmpl = pn.template.MaterialTemplate(**kwargs)
@@ -128,3 +127,6 @@ class EveWebClient(param.Parameterized):
         paths = self.make_paths(tree)
         html = make_menu_html(paths)
         return pn.pane.HTML(html, max_width=max_width)
+
+    def show(self):
+        return self.template().show()

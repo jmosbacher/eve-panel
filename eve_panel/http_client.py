@@ -6,7 +6,7 @@ import httpx
 import panel as pn
 import param
 
-from . import settings
+from .settings import config as settings
 from .auth import AuthSelector, EveAuthBase
 from .eve_model import EveModelBase
 

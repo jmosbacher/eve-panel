@@ -13,6 +13,7 @@ import param
 from .domain import EveDomain
 from .eve_model import EveModelBase
 from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
+from .settings import config as settings
 
 
 class EveClient(EveModelBase):

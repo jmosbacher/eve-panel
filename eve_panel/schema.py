@@ -18,3 +18,5 @@ class EveSchema(EveModelBase):
     def to_item_class(self):
         pass
     
+    def validate(self, doc):
+        pass

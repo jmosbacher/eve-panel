@@ -16,7 +16,7 @@ import webbrowser
 import time
 import secrets
 from .eve_model import EveModelBase
-from . import settings
+from .settings import config as settings
 
 class EveAuthBase(EveModelBase):
     """Base class for Eve authentication scheme
@@ -132,6 +132,7 @@ class Oauth2DeviceFlow(EveAuthBase):
     verification_path = param.String(default="authorize/",label="Verification path")
     extra_headers = param.Dict(label="Extra headers")
     client_id = param.String(default=secrets.token_urlsafe(12), label="Client ID")
+    notify_email = param.String(default="", label="Notify Email")
     device_code = param.String()
     user_code = param.String()
     token = param.String()
@@ -150,7 +151,8 @@ class Oauth2DeviceFlow(EveAuthBase):
         with self.get_client() as client:
             try:
                 resp = client.post(self.code_request_path,
-                                    data={"client_id": self.client_id,})
+                                    data={"client_id": self.client_id,
+                                    "notify_email": self.notify_email})
                 data = resp.json()
             except:
                 pass
@@ -169,7 +171,7 @@ class Oauth2DeviceFlow(EveAuthBase):
                                                 count=int(timeout/interval)+1,
                                                 )
         
-    def authorize_local(self):
+    def authorize(self):
         return webbrowser.open(self.authorize_url)
     
     def authorize_link(self):
@@ -196,6 +198,7 @@ class Oauth2DeviceFlow(EveAuthBase):
                     pass
                 token = data.get("access_token", "")
                 if token:
+                    self.token = token
                     break
                 time.sleep(self.interval)
         return token
@@ -225,11 +228,11 @@ class Oauth2DeviceFlow(EveAuthBase):
                                              button_type="primary",
                                             width=70)
         init_flow_button.on_click(lambda event: self.initiate_flow())
-        params = pn.Param(self.param,parameters=["token", "auth_server_uri", "client_id"],
+        params = pn.Param(self.param, parameters=["token", "auth_server_uri",
+                                                 "client_id","notify_email"],
                             widgets={"token": {"type":pn.widgets.TextAreaInput, 
                                                "width":300}},
                             max_width=300,
-                            show_label=False,
                             sizing_mode="stretch_width")
         buttons = pn.Row(init_flow_button)
         if self._cb is not None:

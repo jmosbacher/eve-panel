@@ -24,7 +24,7 @@ from .domain import EveDomain
 from .eve_client import EveClient
 from .item import EveItem
 from .resource import EveResource
-from .utils import from_app_config
+# from .utils import from_app_config
 from .menu import Menu, css
 from .web_client import EveWebClient
 

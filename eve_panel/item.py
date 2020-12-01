@@ -2,7 +2,7 @@ import panel as pn
 import param
 from bson import ObjectId
 
-from . import settings
+from .settings import config as settings
 from .eve_model import DefaultLayout, EveModelBase
 from .field import EveField
 from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
@@ -24,7 +24,7 @@ class EveItem(EveModelBase):
                                     constant=True,
                                     precedence=14)
 
-    _save = param.Action(lambda self: self.push(), label="Save", precedence=16)
+    _save = param.Action(lambda self: self.save(), label="Save", precedence=16)
     _delete = param.Action(lambda self: self.delete(),
                            label="Delete",
                            precedence=16)
