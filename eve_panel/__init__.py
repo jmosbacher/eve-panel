@@ -15,7 +15,7 @@ Todo:
 
 __author__ = """Yossi Mosbacher"""
 __email__ = 'joe.mosbacher@gmail.com'
-__version__ = '0.3.6'
+__version__ = '0.3.7'
 
 import panel as pn
 
