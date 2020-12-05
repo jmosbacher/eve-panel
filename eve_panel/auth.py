@@ -249,6 +249,12 @@ class Oauth2DeviceFlow(EveAuthBase):
             return {"Authorization": f"Bearer {self.token}"}
         else:
             return {}
+
+    def login(self):
+        self.initiate_flow()
+        self.authorize()
+        token = self.await_token()
+        return bool(token)
         
     def make_panel(self):
         # config = ["auth_server_uri", "client_id"]
