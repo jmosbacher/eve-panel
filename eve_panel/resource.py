@@ -8,12 +8,13 @@ import param
 import yaml
 import typing
 import math
+import base64
 from typing import Union, List, Dict, Tuple
 import multiprocessing as mp
 
 from .settings import config as settings
 from .eve_model import EveModelBase
-from .field import SUPPORTED_SCHEMA_FIELDS, Validator
+from .field import SUPPORTED_SCHEMA_FIELDS, TYPE_MAPPING, Validator
 from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from .item import EveItem
 from .page import EvePage, EvePageCache, PageZero
@@ -128,6 +129,12 @@ class EveResource(EveModelBase):
             return self._cache[key]
         data = self._http_client.get("/".join([self._url, key]))
         if data:
+            if self._file_fields:
+                for k in self._file_fields:
+                    try:
+                        data[k] = base64.b64decode(data[k])
+                    except:
+                        pass
             item = self.make_item(**data)
             return item
         raise KeyError
@@ -195,6 +202,14 @@ class EveResource(EveModelBase):
             dict: Resource metadata
         """
         return self._resource_def.get("metadata", {})
+
+    @property
+    def _file_fields(self):
+        return [k for k,v in self.schema.items() if v["type"]=="media"]
+    
+    @property    
+    def _files(self):
+        return {k: getattr(self, k) for k in self._file_fields}
 
     def read_clipboard(self):
         """Read clipboard into uplaod buffer.
@@ -381,6 +396,13 @@ class EveResource(EveModelBase):
         docs = []
         if resp and "_items" in resp:
             docs = resp["_items"]
+        if self._file_fields:
+            for k in self._file_fields:
+                for doc in docs:
+                    try:
+                        doc[k] = base64.b64decode(doc[k])
+                    except:
+                        pass
         return docs
 
     def find_page(self, **kwargs):
@@ -441,6 +463,9 @@ class EveResource(EveModelBase):
              for k, v in field.items() if k in SUPPORTED_SCHEMA_FIELDS}
             for name, field in self.schema.items()
         }
+        for name, sch in schema.items():
+            if sch["type"] in TYPE_MAPPING:
+                sch["type"] = TYPE_MAPPING[sch["type"]]
         if coerce:
             for sch in schema.values():
                 if sch["type"] in COERCERS:
@@ -458,8 +483,11 @@ class EveResource(EveModelBase):
         return valid, rejected, errors
 
     def post(self, docs):
-        data = json.dumps(docs)
-        return self._http_client.post(self._url, data=data, timeout=int(5+len(docs)*0.1))
+        if self._file_fields:
+            return self._http_client.post(self._url, files=docs[0], timeout=int(5+len(docs)*0.1))
+        else:
+            data = json.dumps(docs)
+            return self._http_client.post(self._url, data=data, timeout=int(5+len(docs)*0.1))
 
     def insert_documents(self, docs: Union[list, tuple, dict], validate=True, dry=False) -> tuple:
         """Insert documents into the database

@@ -20,6 +20,9 @@ SUPPORTED_SCHEMA_FIELDS = [
     "nullable",
 ]
 
+TYPE_MAPPING = {
+    "media": "binary",
+}
 
 def EveField(name, schema, klass):
     if isinstance(klass, param.ClassSelector):
@@ -27,6 +30,8 @@ def EveField(name, schema, klass):
     if not isinstance(klass, type):
         return klass
     schema = {k: v for k, v in schema.items() if k in SUPPORTED_SCHEMA_FIELDS}
+    if schema["type"] in TYPE_MAPPING:
+        schema["type"] = TYPE_MAPPING[schema["type"]]
     # validator = Validator({"value": schema})
 
     def _validate(self, val):
@@ -36,6 +41,7 @@ def EveField(name, schema, klass):
             return
         if self.name is None:
             return
+        
         if not self.validator.validate({"value": val}):
             sep = "\n"
             errors = [
@@ -46,7 +52,6 @@ def EveField(name, schema, klass):
             if len(errors) <= 2:
                 sep = ". "
             raise ValueError(" ".join(errors))
-
     params = {
         # "_schema": schema,
         "_validate": _validate,

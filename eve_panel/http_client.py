@@ -134,7 +134,7 @@ class EveHttpxClient(EveHttpClient):
         self._busy = False
         return []
      
-    def post(self, url, data="", json={}, timeout=10):
+    def post(self, url, data="", json={}, timeout=10, **kwargs):
         with httpx.Client(app=self.app, base_url=self.server_url) as client:
             self._busy = True
             try:
@@ -142,7 +142,8 @@ class EveHttpxClient(EveHttpClient):
                                    data=data,
                                    json=json,
                                    headers=self.headers(),
-                                   timeout=timeout)
+                                   timeout=timeout,
+                                   **kwargs)
                 self._busy = False
                 if resp.is_error:
                     self.log_error(resp.text)
@@ -154,7 +155,7 @@ class EveHttpxClient(EveHttpClient):
                 self.log_error(e)
             self._busy = False
 
-    def put(self, url, data, etag=None, timeout=10):
+    def put(self, url, data={}, etag=None, timeout=10, **kwargs):
         with httpx.Client(app=self.app, base_url=self.server_url) as client:
             self._busy = True
             headers = self.headers()
@@ -163,8 +164,9 @@ class EveHttpxClient(EveHttpClient):
             try:
                 resp = client.put(url,
                                   data=data,
-                                  headers=self.headers(),
-                                  timeout=timeout)
+                                  headers=headers,
+                                  timeout=timeout,
+                                  **kwargs)
                 self._busy = False
                 if resp.is_error:
                     self.log_error(resp.text)
@@ -176,7 +178,7 @@ class EveHttpxClient(EveHttpClient):
                 self.log_error(e)
         self._busy = False
 
-    def patch(self, url, data, etag=None, timeout=10):
+    def patch(self, url, data, etag=None, timeout=10, **kwargs):
         with httpx.Client(app=self.app, base_url=self.server_url) as client:
             self._busy = True
             headers = self.headers()
@@ -186,7 +188,8 @@ class EveHttpxClient(EveHttpClient):
                 resp = client.patch(url,
                                     data=data,
                                     headers=headers,
-                                    timeout=timeout)
+                                    timeout=timeout,
+                                    **kwargs)
                 self._busy = False
                 if resp.is_error or settings.DEBUG:
                     self.log_error(resp.text)

@@ -1,6 +1,7 @@
 import panel as pn
 import param
 from bson import ObjectId
+import json
 
 from .settings import config as settings
 from .eve_model import DefaultLayout, EveModelBase
@@ -124,7 +125,7 @@ class EveItem(EveModelBase):
         self.push()
 
     def to_record(self):
-        return {k: getattr(self, k) for k in self. schema}
+        return {k: getattr(self, k) for k in self.schema}
 
     def to_dict(self):
         return self.to_record()
@@ -139,13 +140,13 @@ class EveItem(EveModelBase):
         yield from self.to_record().items()
 
     def __getitem__(self, key):
-        if key in self. schema:
+        if key in self.schema:
             return getattr(self, key)
         else:
             raise KeyError(f"{key} not found.")
     
     def __setitem__(self, key, value):
-        if key in self. schema:
+        if key in self.schema:
             setattr(self, key, value)
         else:
             raise KeyError(f"{key} cannot be set.")
@@ -199,20 +200,16 @@ class EveItem(EveModelBase):
         ]
 
     def push(self):
-        data = {
-            "_id": self._id,
-        }
-        
         if self._version == self._latest_version:
             etag = self._etag
         else:
             etag = ""
-        for k in self. schema:
-            data[k] = getattr(self, k)
+        data = {k: getattr(self, k) for k in self.schema}
+        data = json.dumps(data)
         self._http_client.put(self.url, data, etag=etag)
         self.pull()
 
-    def patch(self, fields):
+    def patch(self, *fields):
         if self._version == self._latest_version:
             etag = self._etag
         else:
@@ -221,7 +218,7 @@ class EveItem(EveModelBase):
         for k in fields:
             data[k] = getattr(self, k)
         self._http_client.patch(self.url, data, etag=etag)
-
+        self.pull()
 
     def delete(self, verification=None):
         if verification is not None and verification != self._id:
@@ -231,7 +228,7 @@ class EveItem(EveModelBase):
         return self._deleted
 
     def clone(self):
-        data = {k: getattr(self, k) for k in self. schema}
+        data = {k: getattr(self, k) for k in self.schema}
         return self.__class__(**data)
 
     @param.depends("_delete_requested")
@@ -290,7 +287,7 @@ class EveItem(EveModelBase):
                            show_name=False,
                            default_layout=DefaultLayout,
                            widgets=self._widgets,
-                           parameters=list(self. schema)+settings.META_FIELDS,
+                           parameters=list(self.schema)+settings.META_FIELDS,
                            width_policy='max',
                            sizing_mode=self.sizing_mode,
                            width=self.max_width,

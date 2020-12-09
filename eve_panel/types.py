@@ -15,10 +15,8 @@ class CoerceClassSelector(param.ClassSelector):
 def objectid_param(**kwargs):
     return CoerceClassSelector(str, constant=True, **kwargs)
 
-
 def bytes_param(**kwargs):
     return param.ClassSelector(bytes, **kwargs)
-
 
 def set_param(**kwargs):
     return param.ClassSelector(set, **kwargs)
@@ -57,10 +55,14 @@ DASK_TYPE_MAPPING = {
 
 }
 
+def to_binary(x):
+    if isinstance(x, str):
+        x = str.encode(x)
+    return x
 COERCERS = {
     "objectid": str,
     "boolean": bool,
-    "binary": bytes,
+    "binary": to_binary,
     "date": np.datetime64,
     "datetime": np.datetime64,
     "dict": dict,
@@ -70,5 +72,5 @@ COERCERS = {
     "number": float,
     "set": set,
     "string": str,
-    "media": bytes,
+    "media": to_binary,
 }
