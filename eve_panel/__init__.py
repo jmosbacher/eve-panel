@@ -20,7 +20,6 @@ __version__ = '0.3.8'
 import panel as pn
 
 from .auth import EveAuthBase
-from .domain import EveDomain
 from .eve_client import EveClient
 from .item import EveItem
 from .resource import EveResource

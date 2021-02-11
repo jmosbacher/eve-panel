@@ -205,6 +205,7 @@ class EveItem(EveModelBase):
         else:
             etag = ""
         data = {k: getattr(self, k) for k in self.schema}
+        data = {k:v for k,v in data.items() if v is not None}
         data = json.dumps(data)
         self._http_client.put(self.url, data, etag=etag)
         self.pull()

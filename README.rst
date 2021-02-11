@@ -32,15 +32,13 @@ Usage
 
     app = eve.Eve()
 
-    client = eve_panel.EveClient.from_app(app)
+    api = eve_panel.EveClient.from_app(app)
     
     # optional
-    client.auth.set_token("my-secret-token")
-
-    api = client.db
+    api.set_token("my-secret-token")
 
     # show a resources gui
-    api.resource_name 
+    api.resource_name
 
     # get a specific item
     api.resource_name["item_id"]
@@ -53,6 +51,11 @@ Usage
 
     # get previous page
     api.resource_name.previous_page()
+
+    # insert new documents
+    docs = [{"name": "new document"}]
+    api.resource_name.insert_documents(docs)
+    
 
 
 * Free software: MIT

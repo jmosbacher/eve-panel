@@ -20,6 +20,7 @@ from .item import EveItem
 from .page import EvePage, EvePageCache, PageZero
 from .io import FILE_READERS, read_data_file
 from .types import DASK_TYPE_MAPPING, COERCERS
+from .utils import NumpyJSONENncoder
 
 try:
     from ruamel.yaml import YAML
@@ -171,6 +172,7 @@ class EveResource(EveModelBase):
                         projection={"_id": 1},
                         max_results=1,
                         page=1,
+                        timeout=15,
                         )
         if "_meta" in resp:
             return int(resp["_meta"].get("total", 0))
@@ -367,9 +369,9 @@ class EveResource(EveModelBase):
             self._cache[idx].push()
 
     def get(self, **kwargs):
-        kwargs = {k:v if isinstance(v, str) else json.dumps(v) for k,v in kwargs.items()}
-        default_timeout = 5+int(kwargs.get("max_results", 100))*0.05
-        kwargs["timeout"] = kwargs.get("timeout", default_timeout)
+        timeout = kwargs.pop("timeout", 5+int(kwargs.get("max_results", 100))*0.05)
+        kwargs = {k:v if isinstance(v, str) else json.dumps(v, cls=NumpyJSONENncoder) for k,v in kwargs.items()}
+        kwargs["timeout"] = timeout
         return self._http_client.get(self._url, **kwargs)
 
     def find(self, query={}, projection={}, sort="", max_results=25, page_number=1):
@@ -483,11 +485,8 @@ class EveResource(EveModelBase):
         return valid, rejected, errors
 
     def post(self, docs):
-        if self._file_fields:
-            return self._http_client.post(self._url, files=docs[0], timeout=int(5+len(docs)*0.1))
-        else:
-            data = json.dumps(docs)
-            return self._http_client.post(self._url, data=data, timeout=int(5+len(docs)*0.1))
+        data = json.dumps(docs, cls=NumpyJSONENncoder)
+        return self._http_client.post(self._url, data=data, timeout=int(5+len(docs)*0.1))
 
     def insert_documents(self, docs: Union[list, tuple, dict], validate=True, dry=False) -> tuple:
         """Insert documents into the database

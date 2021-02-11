@@ -116,13 +116,13 @@ class EveHttpxClient(EveHttpClient):
         return headers
 
     def get(self, url, timeout=10, **params):
-        # with httpx.Client(app=self.app, base_url=self.server_url) as client:
+      with httpx.Client(app=self.app, base_url=self.server_url) as client:
         self._busy = True
         try:
-            resp = self.client.get(url,
-                                params=params,
-                                headers=self.headers(),
-                                timeout=timeout)
+            resp = client.get(url,
+                            params=params,
+                            headers=self.headers(),
+                            timeout=timeout)
             self._busy = False
             if resp.is_error:
                 self.log_error(resp.text)
