@@ -1,6 +1,9 @@
 import param
 from eve.io.mongo.validation import Validator
 
+from .types import COERCERS
+
+
 SUPPORTED_SCHEMA_FIELDS = [
     "type",
     "schema",
@@ -30,8 +33,12 @@ def EveField(name, schema, klass):
     if not isinstance(klass, type):
         return klass
     schema = {k: v for k, v in schema.items() if k in SUPPORTED_SCHEMA_FIELDS}
+    if schema["type"] in COERCERS:
+        schema["coerce"] = COERCERS[schema["type"]]
     if schema["type"] in TYPE_MAPPING:
         schema["type"] = TYPE_MAPPING[schema["type"]]
+    
+
     # validator = Validator({"value": schema})
 
     def _validate(self, val):
@@ -59,3 +66,4 @@ def EveField(name, schema, klass):
     }
 
     return type(f"Eve{name.title()}{klass.__name__}Field", (klass, ), params)
+

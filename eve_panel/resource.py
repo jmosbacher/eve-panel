@@ -8,19 +8,21 @@ import param
 import yaml
 import typing
 import math
+import asyncio
 import base64
 from typing import Union, List, Dict, Tuple
 import multiprocessing as mp
+from tqdm.autonotebook import tqdm
 
 from .settings import config as settings
 from .eve_model import EveModelBase
 from .field import SUPPORTED_SCHEMA_FIELDS, TYPE_MAPPING, Validator
-from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
+from .session import DEFAULT_SESSION_CLASS, EveSessionBase
 from .item import EveItem
 from .page import EvePage, EvePageCache, PageZero
 from .io import FILE_READERS, read_data_file
 from .types import DASK_TYPE_MAPPING, COERCERS
-from .utils import NumpyJSONENncoder
+from .utils import NumpyJSONENncoder, to_data_dict
 
 try:
     from ruamel.yaml import YAML
@@ -39,8 +41,8 @@ class EveResource(EveModelBase):
         EveModelBase:
 
     """
+    session = param.ClassSelector(EveSessionBase, constant=True, precedence=-1)
     _paste_bin = param.ClassSelector(class_=pn.widgets.Ace, default=None, )
-    _http_client = param.ClassSelector(EveHttpClient, precedence=-1)
     _url = param.String(precedence=-1)
     _page_view_format = param.Selector(objects=["Table", "Widgets", "JSON"],
                                        default=settings.DEFAULT_VIEW_FORMAT,
@@ -85,37 +87,39 @@ class EveResource(EveModelBase):
                                      precedence=5)
     _plot_selection = param.String("None")
     _plot = param.Parameter(default=None)
+    _progress = param.Parameter(default=None)
+    _active = param.Boolean(default=False)
 
     @classmethod
     def from_resource_def(cls,
                           resource_def: dict,
                           resource_name: str,
-                          http_client: EveHttpClient = None):
+                          session=None):
         """Generate a resource interface from a Eve resource definition. 
 
         Args:
             resource_def (dict): Eve resource definition
             resource_name (str): Name to use for this resource
-            http_client (EveHttpClient, optional): http client to use. Defaults to None.
+            session (EveSession, optional): session to use. Defaults to None.
             
 
         Returns:
             EveResource: Interface to the remote resource.
         """
-        
         resource = dict(resource_def)
         schema = resource.pop("schema")
-        if http_client is None:
-            http_client = DEFAULT_HTTP_CLIENT()
+        if session is None:
+            session = DEFAULT_SESSION_CLASS()
+        
         item = EveItem.from_schema(resource["item_title"].replace(" ", "_"),
                                    schema,
                                    resource["url"],
-                                   http_client=http_client)
+                                   session=session)
         item_class = item.__class__
         plots = list(resource.get("metadata", {}).get("plots", {}))
         params = dict(name=resource["resource_title"].replace(" ", "_"),
                       _url=resource["url"],
-                      _http_client=http_client,
+                      session=session,
                       _item_class=item_class,
                       _resource_def=resource,
                       schema=schema,
@@ -128,7 +132,7 @@ class EveResource(EveModelBase):
     def __getitem__(self, key):
         if key in self._cache:
             return self._cache[key]
-        data = self._http_client.get("/".join([self._url, key]))
+        data = self.session.get("/".join([self._url, key]))
         if data:
             if self._file_fields:
                 for k in self._file_fields:
@@ -143,13 +147,16 @@ class EveResource(EveModelBase):
     def __setitem__(self, key, value):
         self._cache[key] = value
 
+    def __iter__(self):
+        yield from self.values()
+
     def make_item(self, **kwargs):
         """Generate EveItem from key value pairs
 
         Returns:
             EveItem: EveItem instance that enforces schema of current resource.
         """
-        return self._item_class(**kwargs, _http_client=self._http_client)
+        return self._item_class(**kwargs, session=self.session)
 
     @property
     def projection(self):
@@ -184,7 +191,7 @@ class EveResource(EveModelBase):
         return not any([v["type"] in ['list', 'dict'] for v in self.schema.values()])
 
     @property
-    def page_options(self):
+    def page_numbers(self):
         return list(range(1, math.ceil(self.nitems/self.items_per_page)+1))
 
     @property
@@ -212,6 +219,15 @@ class EveResource(EveModelBase):
     @property    
     def _files(self):
         return {k: getattr(self, k) for k in self._file_fields}
+
+    @param.depends("page_number")
+    def gui_progress(self):
+        if self._progress is None:
+            self._progress = pn.indicators.Progress(max=1, active=self._active, align="end")
+        if self.page_number > self._progress.max:
+            self._progress.max = len(self.page_numbers)
+        self._progress.value = self.page_number
+        return self._progress
 
     def read_clipboard(self):
         """Read clipboard into uplaod buffer.
@@ -258,6 +274,7 @@ class EveResource(EveModelBase):
         return [{k: v
                  for k, v in doc.items() if k in self.schema} for doc in docs]
 
+
     @property
     def gui(self):
         return self.panel()
@@ -282,12 +299,46 @@ class EveResource(EveModelBase):
         for page in self.pages():
             yield from page.records()
 
-    def pages(self, start=1, end=None):
-        for idx in self.page_options:
-            page = self.get_page(idx)
-            if not len(page):
+    def get_progress_bar_cb(self, total=100, step=1, desc=None, unit=None):
+        pbar = tqdm(total=total, desc=desc, unit=unit)
+        def cb(idx):
+            pbar.update(step)
+        return cb
+
+    def pages(self, start=1, end=None, use_async=True, cb=None):
+        if use_async:
+            pages = asyncio.run(self.pages_async(start=start, end=end, cb=cb))
+            yield from pages
+        else:
+            page_numbers = self.page_numbers
+            if cb is None:
+                cb = self.get_progress_bar_cb(total=len(page_numbers)*self.items_per_page, step=self.items_per_page,
+                        desc=f"Fetching {self.name.lower().replace('_', '')} documents", unit="docs")
+            for idx in page_numbers:
+                if idx<start:
+                    continue
+                if end is not None and idx > end:
+                    break
+                page = self.get_page(idx, cb=True)
+                if not len(page):
+                    break
+                yield page
+
+    async def pages_async(self, start=1, end=None, cb=None):
+        aws = []
+        page_numbers = self.page_numbers
+        if cb is None:
+            cb = self.get_progress_bar_cb(total=len(page_numbers)*self.items_per_page, step=self.items_per_page, 
+                desc=f"Fetching {self.name.lower().replace('_', ' ')} documents", unit="docs")
+            
+        for idx in page_numbers:
+            if idx<start:
+                continue
+            if end is not None and idx > end:
                 break
-            yield page
+            aws.append(self.get_page_async(idx, cb=cb))
+        pages = await asyncio.gather(*aws)
+        return pages
 
     def new_item(self, data={}):
         item = self.item_class(**data)
@@ -296,12 +347,13 @@ class EveResource(EveModelBase):
     def to_records(self):
         return [item.to_dict() for item in self.values()]
 
-    def to_dataframe(self):
-        df = pd.concat([page.to_dataframe() for page in self.pages()])
+    def to_dataframe(self, start=1, end=None, cb=None, use_async=True):
+        df = pd.concat([page.to_dataframe() for page in 
+                        self.pages(use_async=use_async, start=start, end=end, cb=cb)])
         if "_id" in df.columns:
             df = df.set_index("_id")
         return df
-    
+   
     def to_dask(self, pages=None, persist=False):
         try:
             import dask
@@ -309,13 +361,15 @@ class EveResource(EveModelBase):
             raise RuntimeError("Dask is not installed.")
 
         if pages is None:
-            pages = self.page_options
+            pages = self.page_numbers
         columns = [(k, DASK_TYPE_MAPPING[v["type"]]) for k,v in self.schema.items() 
                                     if k in self.fields and not k.startswith("_")]
         column_types = dict(columns)
 
         url = self._url
-        client_kwargs = self._http_client.get_client_kwargs()
+        client_kwargs = self.session.get_client_kwargs()
+        if client_kwargs["app"] is not None:
+            client_kwargs["app"] = dict(client_kwargs["app"].config)
 
         def get_data(params):
             import httpx
@@ -325,7 +379,7 @@ class EveResource(EveModelBase):
             items = []
             with httpx.Client(**client_kwargs) as client:
                 try:
-                    resp = client.get(url, params=params, timeout=15)
+                    resp = client.get(url, params=params,)
                     items = resp.json().get("_items", [])
                 except:
                     pass
@@ -355,26 +409,71 @@ class EveResource(EveModelBase):
             return df.persist()
         return df
 
+   
     def pull(self, start=1, end=None):
         for idx in itertools.count(start):
             if end is not None and idx > end:
                 break
             if not self.pull_page(idx):
                 break
-
+    
     def push(self, idxs=None):
         if idxs is None:
             idxs = list(self._cache.keys())
         for idx in idxs:
             self._cache[idx].push()
 
-    def get(self, **kwargs):
-        timeout = kwargs.pop("timeout", 5+int(kwargs.get("max_results", 100))*0.05)
-        kwargs = {k:v if isinstance(v, str) else json.dumps(v, cls=NumpyJSONENncoder) for k,v in kwargs.items()}
-        kwargs["timeout"] = timeout
-        return self._http_client.get(self._url, **kwargs)
+    def get(self, timeout=None, **params):
+        params = {k:v if isinstance(v, str) else json.dumps(v, cls=NumpyJSONENncoder) for k,v in params.items()}
+        with self.session.Client(timeout=timeout) as client:
+            resp = client.get(self._url, params=params)
+        return resp.json()
 
-    def find(self, query={}, projection={}, sort="", max_results=25, page_number=1):
+    async def get_async(self, timeout=None, **params):
+        params = {k:v if isinstance(v, str) else json.dumps(v, cls=NumpyJSONENncoder) for k,v in params.items()}
+        async with self.session.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(self._url, params=params)
+        return resp.json()
+    
+    def post_with_files(self, docs):
+        success, failed, errors = [], [], []
+        with self.session.Client() as client:
+            for doc in docs:
+                files = {name: BytesIO(doc.pop(name)) for name in self._file_fields if name in doc}
+                data = to_data_dict(doc)
+               
+                try:
+                    resp = client.post(self._url, data=data, files=files)
+                    success.append(doc)
+                except Exception as e:
+                    failed.append(doc)
+                    errors.append(str(e))
+        
+        return success, failed, errors
+
+    def post_batched(self, docs):
+        data = json.dumps(docs, cls=NumpyJSONENncoder)
+        with self.session.Client() as client:
+            resp = client.post(self._url, data=data, )
+        success, failed, errors = [], [], []
+        for doc, result in zip(docs, resp.json()["_items"]):
+            if result["_status"]=="OK":
+                success.append(doc)
+            else:
+                failed.append(doc)
+                errors.append(result)
+            
+        if len(failed):
+            success = []
+        return success, failed, errors
+
+    def post(self, docs, raise_status=True):
+        if len(self._file_fields):
+            return self.post_with_files(docs)
+        else:
+            return self.post_batched(docs)
+
+    def find(self, query={}, projection={}, sort="", max_results=25, page_number=1, timeout=None):
         """Find documents in the remote resource that match a mongodb query.
 
         Args:
@@ -389,18 +488,62 @@ class EveResource(EveModelBase):
         Returns:
             list: requested page documents that match query
         """
-
+        if max_results>1 and not any([bool(v) for v in projection.values()]):
+            for name in self._file_fields:
+                projection[name] = 0
         resp = self.get(where=query,
                         projection=projection,
                         sort=sort,
                         max_results=max_results,
-                        page=page_number)
+                        page=page_number,
+                        timeout=timeout)
+        if "_error" in resp:
+            return resp["_error"]
+
         docs = []
-        if resp and "_items" in resp:
+        if "_items" in resp:
             docs = resp["_items"]
+
         if self._file_fields:
-            for k in self._file_fields:
-                for doc in docs:
+            for doc in docs:
+                for k in self._file_fields:
+                    try:
+                        doc[k] = base64.b64decode(doc[k])
+                    except:
+                        pass
+        return docs
+
+    async def find_async(self, query={}, projection={}, sort="", max_results=25, page_number=1, timeout=None):
+        """Find documents in the remote resource that match a mongodb query.
+
+        Args:
+            query (dict, optional): Mongo query. Defaults to {}.
+            projection (dict, optional): Mongo projection. Defaults to {}.
+            sort (Union[string, list[tuple]], optional): Sorting either string as e.g:
+                                 city,-lastname or list as e.g: [("city", 1), ("lastname", -1)]
+            max_results (int, optional): Items per page. Defaults to 25.
+            page_number (int, optional): page to return if query returns more than max_results.\
+                                         Defaults to 1.
+
+        Returns:
+            list: requested page documents that match query
+        """
+        if max_results>1 and not any([bool(v) for v in projection.values()]):
+            for name in self._file_fields:
+                projection[name] = 0
+        resp = await self.get_async(where=query,
+                        projection=projection,
+                        sort=sort,
+                        max_results=max_results,
+                        page=page_number,
+                        timeout=timeout)
+        docs = []
+        if "_items" in resp:
+            docs = resp["_items"]
+
+        if self._file_fields:
+            for doc in docs:
+                for k in self._file_fields:
                     try:
                         doc[k] = base64.b64decode(doc[k])
                     except:
@@ -420,11 +563,34 @@ class EveResource(EveModelBase):
             fields=self.fields)
         return page
 
+    async def find_page_async(self, **kwargs):
+        """Same as :meth:`eve_panel.EveResource.find()`, only returns an EvePage instance
+        """
+        docs = await self.find_async(**kwargs)
+        items = [self.make_item(**doc) for doc in docs]
+        page_number = kwargs.get("page_number", self.page_number)
+        page = EvePage(
+            name=f'{self._url.replace("/", ".")} page {page_number}',
+            _items={item._id: item
+                    for item in items},
+            fields=self.fields)
+        return page
+
     def find_df(self, **kwargs):
         """Same as :meth:`eve_panel.EveResource.find()`, only returns a pandas dataframe
 
         """
         page = self.find_page(**kwargs)
+        df = page.to_dataframe()
+        if "_id" in df.columns:
+            df = df.set_index("_id")
+        return df
+
+    async def find_df_async(self, **kwargs):
+        """Same as :meth:`eve_panel.EveResource.find()`, only returns a pandas dataframe
+
+        """
+        page = await self.find_page_async(**kwargs)
         df = page.to_dataframe()
         if "_id" in df.columns:
             df = df.set_index("_id")
@@ -445,8 +611,28 @@ class EveResource(EveModelBase):
         if docs:
             return docs[0]
 
+    async def find_one_async(self, query: dict={}, projection: dict={}) -> dict:
+        """Find the first document that matches the query,
+                 optionally project only given fields.
+
+        Args:
+            query (dict, optional): Mongo qury to perform. Defaults to {}.
+            projection (dict, optional): Mopngo projection. Defaults to {}.
+
+        Returns:
+            Union[dict, None]: If document found, returns it. If not returns None.
+        """
+        docs = await self.find_async(query=query, projection=projection, max_results=1)
+        if docs:
+            return docs[0]
+
     def find_one_item(self, **kwargs):
         doc = self.find_one(**kwargs)
+        if doc:
+            return self.make_item(**doc)
+
+    async def find_one_item_async(self, **kwargs):
+        doc = await self.find_one_async(**kwargs)
         if doc:
             return self.make_item(**doc)
 
@@ -484,11 +670,8 @@ class EveResource(EveModelBase):
                 errors.append(v.errors)
         return valid, rejected, errors
 
-    def post(self, docs):
-        data = json.dumps(docs, cls=NumpyJSONENncoder)
-        return self._http_client.post(self._url, data=data, timeout=int(5+len(docs)*0.1))
 
-    def insert_documents(self, docs: Union[list, tuple, dict], validate=True, dry=False) -> tuple:
+    def insert_documents(self, docs: Union[List, Tuple, Dict], validate=True, dry=False) -> Tuple:
         """Insert documents into the database
 
         Args:
@@ -514,11 +697,19 @@ class EveResource(EveModelBase):
             rejected, errors = [], []
         if dry:
             success = docs
-        elif docs and self.post(docs):
-            success = docs
+        elif docs:
+            success, post_rejected, post_errors = self.post(docs)
+            rejected.extend(post_rejected)
+            errors.extend(post_errors)
         else:
             success = []
         return success, rejected, errors
+
+    def insert_items(self, items: Union[EveItem, List[EveItem]]):
+        if isinstance(items, EveItem):
+            items = [items]
+        docs = [item.to_dict() for item in items]
+        return self.insert_documents(self, docs, validate=False)
 
     def clear_upload_buffer(self):
         """Discards the current upload buffer.
@@ -549,7 +740,7 @@ class EveResource(EveModelBase):
         self.upload_errors = [str(err) for err in errors]
         return success
 
-    def pull_page(self, idx=0, cache_result=True):
+    def pull_page(self, idx=0, cache_result=True, timeout=None):
         if not idx and cache_result:
             self._cache[idx] = PageZero()
             return False
@@ -557,7 +748,22 @@ class EveResource(EveModelBase):
                               projection=self.projection,
                               sort=",".join(self.sorting),
                               max_results=self.items_per_page,
-                              page_number=idx)
+                              page_number=idx,
+                              timeout=timeout)
+        if page._items and cache_result:
+            self._cache[idx] = page
+        return page
+
+    async def pull_page_async(self, idx=0, cache_result=True, timeout=None):
+        if not idx and cache_result:
+            self._cache[idx] = PageZero()
+            return False
+        page = await self.find_page_async(query=self.filters,
+                              projection=self.projection,
+                              sort=",".join(self.sorting),
+                              max_results=self.items_per_page,
+                              page_number=idx,
+                              timeout=timeout)
         if page._items and cache_result:
             self._cache[idx] = page
         return page
@@ -584,13 +790,29 @@ class EveResource(EveModelBase):
         return self._cache.get(
             idx, EvePage(name="Place holder", fields=self.fields))
 
+    async def get_page_async(self, idx, cb=None, timeout=None):
+        if idx not in self._cache or not len(self._cache[idx]):
+            await self.pull_page_async(idx, timeout=timeout)
+        
+        page = self._cache.get(
+            idx, EvePage(name="Place holder", fields=self.fields))
+        if len(page) and callable(cb):
+            cb(idx)
+        return page
+
     def get_page_records(self, idx):
         return self.get_page(idx).to_records()
 
+    async def get_page_records_async(self, idx):
+        records = await self.get_page_async(idx).to_records()
+        return records
+
     def get_page_df(self, idx, fields=None):
         df = self.get_page(idx).to_dataframe()
-        # if "_id" in df.columns and set_index:
-        #     df = df.set_index("_id")
+        return df
+
+    async def get_page_df_async(self, idx, fields=None):
+        df = await self.get_page_async(idx).to_dataframe()
         return df
 
     def increment_page(self):
@@ -912,7 +1134,7 @@ class EveResource(EveModelBase):
         if show_client:
             page_settings.append("### HTTP client")
             page_settings.append(pn.layout.Divider())
-            page_settings.append(self._http_client.panel)
+            page_settings.append(self.session.panel)
 
 
         tabs = pn.Tabs(
@@ -921,7 +1143,7 @@ class EveResource(EveModelBase):
                 ("Upload", self.upload_view()),
                 ("Download", self.download_view),
                 ("Config", page_settings),
-                ("Errors", self._http_client.messages),
+                # ("Errors", self.session.messages),
                 dynamic=False,
                 tabs_location=tabs_location,
                 width_policy='max',
@@ -935,6 +1157,7 @@ class EveResource(EveModelBase):
                                "_reload_page_button", "_next_page_button",
                                "_clear_cache_button",
                            ],
+                           
                            default_layout=pn.Row,
                            name="",
                            width_policy='max',
@@ -946,12 +1169,15 @@ class EveResource(EveModelBase):
         header = pn.Row(
             f'## {self.name.replace("_", " ").title()} resource',
             pn.Spacer(sizing_mode='stretch_both'),
+            pn.Column(pn.Spacer(), self.gui_progress, pn.Spacer()),
+           
             buttons,
             pn.Spacer(sizing_mode='stretch_both'),
+            align="center",
             
         )
-        if settings.SHOW_INDICATOR:
-            header.append(self._http_client.busy_indicator)
+        # if settings.SHOW_INDICATOR:
+        #     header.append(self.session.busy_indicator)
 
         view = pn.Column(
             header, 

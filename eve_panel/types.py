@@ -1,7 +1,8 @@
 import param
 from bson import objectid
 import numpy as np
-
+import pandas as pd
+import base64
 
 class CoerceClassSelector(param.ClassSelector):
     def __set__(self, obj, val):
@@ -59,12 +60,18 @@ def to_binary(x):
     if isinstance(x, str):
         x = str.encode(x)
     return x
+
+def base64_to_binary(x):
+    if isinstance(x, str):
+        x = base64.b64decode(x)
+    return x
+
 COERCERS = {
     "objectid": str,
     "boolean": bool,
     "binary": to_binary,
-    "date": np.datetime64,
-    "datetime": np.datetime64,
+    "date": pd.to_datetime,
+    "datetime": pd.to_datetime,
     "dict": dict,
     "float": float,
     "integer": int,
@@ -72,5 +79,6 @@ COERCERS = {
     "number": float,
     "set": set,
     "string": str,
-    "media": to_binary,
+    "media": base64_to_binary,
 }
+

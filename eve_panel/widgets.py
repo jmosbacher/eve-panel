@@ -1,5 +1,6 @@
 import ast
 import json
+import base64
 
 import panel as pn
 import param
@@ -47,8 +48,34 @@ def LiteralSchemaInput(name, schema, type_=None):
     return type(name + "InputWidget", (LiteralSchemaInputBase, ), params)
 
 
+def PDFViewer(pdf, width=800, height=500):
+    if isinstance(pdf, bytes):
+        pdf = base64.b64encode(pdf).decode()
+    return pn.pane.HTML(f'<iframe width={width} height={height} src="data:application/pdf;base64,{pdf}" type="application/pdf"></iframe>',
+                   width=1000,sizing_mode="stretch_both")
+
+def PNGViewer(png, width=800, height=500):
+    if isinstance(png, bytes):
+        png = base64.b64encode(png).decode()
+    src = f"data:image/png;base64,{png}"
+    return pn.pane.HTML(f"<img src='{src}' width={width} height={height}></img>")
+                
+class FileInputPreview(pn.widgets.FileInput):
+
+    @param.depends('value')
+    def preview(self):
+        if not self.filename:
+            return pn.Column()
+        if self.filename.endswith(".png"):
+            return PNGViewer(self.value)
+        elif self.filename.endswith(".pdf"):
+            return PDFViewer(self.value)
+
+    def _repr_mimebundle_(self, include=None, exclude=None):
+        return pn.Column(self, self.preview)
+
 WIDGET_MAPPING = {
-    "media": pn.widgets.FileInput,
+    "media": {"type": pn.widgets.FileInput, "align": "end"},
 }
 
 
