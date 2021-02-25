@@ -24,7 +24,7 @@ if os.path.exists(readme_path):
 setup(
     long_description=readme,
     name='eve_panel',
-    version='0.3.6',
+    version='0.3.9',
     description='Top-level package for Eve-Panel.',
     python_requires='>=3.6',
     project_urls={"documentation": "https://eve-panel.readthedocs.io", "homepage": "https://jmosbacher.github.io/eve-panel"},
@@ -32,9 +32,9 @@ setup(
     author_email='joe.mosbacher@gmail.com',
     license='MIT',
     classifiers=['Development Status :: 2 - Pre-Alpha', 'Intended Audience :: Developers', 'License :: OSI Approved :: MIT License', 'Natural Language :: English', 'Programming Language :: Python :: 3', 'Programming Language :: Python :: 3.6', 'Programming Language :: Python :: 3.7', 'Programming Language :: Python :: 3.8'],
-    packages=['eve_panel'],
+    packages=['eve_panel', 'eve_panel.auth'],
     package_dir={"": "."},
     package_data={},
-    install_requires=['eve==1.*,>=1.1.3', 'httpx==0.*,>=0.16.1', 'pandas', 'panel==0.*,>=0.10.1'],
-    extras_require={"dask": ["dask"], "dev": ["bumpversion", "coverage", "flake8", "invoke", "isort", "nbsphinx", "numpydoc", "pylint", "pytest", "sphinx", "sphinx-material", "tox", "yapf"], "full": ["dask", "hvplot"], "plotting": ["hvplot"]},
+    install_requires=['authlib==0.*,>=0.15.3', 'dask', 'eve==1.*,>=1.1.3', 'httpx==0.*,>=0.16.1', 'pandas', 'panel==0.*,>=0.10.1'],
+    extras_require={"dev": ["bumpversion", "coverage", "flake8", "invoke", "isort", "nbsphinx", "numpydoc", "pylint", "pytest", "sphinx", "sphinx-material", "tox", "yapf"], "full": ["hvplot"], "plotting": ["hvplot"]},
 )
