@@ -50,6 +50,15 @@ class Config(param.Parameterized):
     MAX_MESSAGES = 3
     META_FIELDS = ["_version", "_latest_version", "_etag", "_created"]
     SHOW_INDICATOR = True
+    DEFAULT_TIMEOUT = 20
+    IGNORE_ERRORS = False
+    
+    OAUTH_DOMAIN = ConfigParameter(str, env_prefix="eve_panel", default="http://localhost/oauth")
+    OAUTH_CERT_PATH = ConfigParameter(str, env_prefix="eve_panel", default="/.well-know/certs")
+    OAUTH_CODE_PATH = ConfigParameter(str, env_prefix="eve_panel", default="/device/code")
+    OAUTH_TOKEN_PATH = ConfigParameter(str, env_prefix="eve_panel", default="/token")
+    DEFAULT_CLIENT_ID = ConfigParameter(str, env_prefix="eve_panel", default="eve-panel")
+    DEFAULT_AUDIENCE = ConfigParameter(str, env_prefix="eve_panel", default="")
     
 
 config = Config()

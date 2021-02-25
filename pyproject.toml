@@ -33,6 +33,7 @@ pandas = "*"
 # optional
 dask = { optional = true, version = "*" }
 hvplot = { optional = true, version = "*" }
+Authlib = "^0.15.3"
 
 
 [tool.poetry.dev-dependencies]
@@ -51,9 +52,9 @@ sphinx-material = "*"
 numpydoc = "*"
 
 [tool.poetry.extras]
-dask = ["dask"]
+dask = ["dask[dataframe]"]
 plotting = ["hvplot", "xarray"]
-full = ["dask", "hvplot", "xarray"]
+full = ["dask[dataframe]", "hvplot", "xarray"]
 
 [tool.dephell.main]
 versioning = "semver"

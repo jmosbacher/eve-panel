@@ -2,17 +2,21 @@ import panel as pn
 import param
 from bson import ObjectId
 import json
+from io import BytesIO
+import logging
 
 from .settings import config as settings
 from .eve_model import DefaultLayout, EveModelBase
 from .field import EveField
-from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
+from .session import EveSessionBase
 from .types import TYPE_MAPPING
 from .widgets import get_widget
+from .utils import NumpyJSONENncoder, to_data_dict, to_json_compliant
 
+logger = logging.getLogger(__name__)
 
 class EveItem(EveModelBase):
-    _http_client = param.ClassSelector(EveHttpClient, precedence=-1)
+    session = param.ClassSelector(EveSessionBase, constant=True, precedence=-1)
     _resource_url = param.String(precedence=-1)
     _etag = param.String(allow_None=True, precedence=15)
     _version = param.Integer(default=1,
@@ -51,10 +55,9 @@ class EveItem(EveModelBase):
                     name,
                     schema,
                     resource_url,
-                    http_client=None,
+                    session=None,
                     data={}):
-        if http_client is None:
-            http_client = DEFAULT_HTTP_CLIENT()
+        
         params = dict(
             schema=param.Dict(default=schema,
                                allow_None=False,
@@ -114,7 +117,7 @@ class EveItem(EveModelBase):
         return klass(schema=schema,
                      _widgets=_widgets,
                      _resource_url=resource_url,
-                     _http_client=http_client,
+                     session=session,
                      **data)
 
     @property
@@ -124,8 +127,18 @@ class EveItem(EveModelBase):
     def save(self):
         self.push()
 
-    def to_record(self):
-        return {k: getattr(self, k) for k in self.schema}
+    def to_record(self, exclude_files=True):
+        obj = {}
+        for k in self.schema:
+            v = getattr(self, k)
+            if exclude_files and isinstance(v, bytes):
+                continue
+            obj[k] = v
+        return obj
+
+    def to_json(self):
+        obj = self.to_record()
+        return json.dumps(obj, cls=NumpyJSONENncoder)
 
     def to_dict(self):
         return self.to_record()
@@ -154,9 +167,12 @@ class EveItem(EveModelBase):
     @param.depends("_version", watch=True)
     def pull(self):
         if self._version is None:
-            return
-        data = self._http_client.get(self.url,
-                                     version=self._version)
+            version = 1
+        else:
+            version = self._version
+        with self.session.Client() as client:
+            resp = client.get(self.url, params=dict(version=version))
+        data = resp.json()
         if not data:
             return
         for k, v in data.items():
@@ -166,71 +182,91 @@ class EveItem(EveModelBase):
                     if param.constant or param.readonly:
                         setattr(self, getattr(param, "_internal_name"), v)
                     else:
-                        setattr(self, k, v)
+                        self.param.set_param(k=v)
                 except Exception as e:
-                    print(e)
+                    logger.error(str(e))
                     pass
     
-    def version(self, version):
-        self._version = version
-        return self.clone(_version=version)
-
-    def versions(self):
-        data = self._http_client.get(self.url,
-                                     version='all')
+    def get_version(self, version):
+        vers = self.clone(_version=version)
+        vers.pull()
+        return vers
+        
+    def all_versions(self):
+        with self.session.Client() as client:
+            resp = client.get(self.url, params=dict(version='all'))
+            resp.raise_for_status()
+        data = resp.json()
         if not data:
             return []
         return [
             self.__class__(**doc,
-                           _http_client=self._http_client,
+                           session=self.session,
                            _resource_url=self._resource_url)
             for doc in data.get("_items", [])
         ]
 
     def version_diffs(self):
-        data = self._http_client.get(self.url,
-                                     version='diffs')
+        with self.session.Client() as client:
+            resp = client.get(self.url, params=dict(version='diffs'))
+
+        data = resp.json()
         if not data:
             return []
         return [
             self.__class__(**doc,
-                           _http_client=self._http_client,
+                           session=self.session,
                            _resource_url=self._resource_url)
             for doc in data.get("_items", [])
         ]
 
     def push(self):
+        headers ={}
         if self._version == self._latest_version:
-            etag = self._etag
-        else:
-            etag = ""
-        data = {k: getattr(self, k) for k in self.schema}
-        data = {k:v for k,v in data.items() if v is not None}
-        data = json.dumps(data)
-        self._http_client.put(self.url, data, etag=etag)
+            headers["If-Match"] = self._etag
+        data = {k: getattr(self, k) for k in self.schema if not k.startswith("_")}
+        doc = {k:v for k,v in data.items() if v is not None}
+        files = {name: BytesIO(doc.pop(name)) for name, value in data.items()
+                    if isinstance(value, bytes)}
+        data = to_data_dict(doc)
+        
+        with self.session.Client() as client:
+            resp = client.put(self.url, data=data, files=files, headers=headers)
         self.pull()
 
     def patch(self, *fields):
+        headers ={}
         if self._version == self._latest_version:
-            etag = self._etag
-        else:
-            etag = ""
-        data = {"_id": self._id}
+            headers["If-Match"] = self._etag
+            
+        data = {}
         for k in fields:
             data[k] = getattr(self, k)
-        self._http_client.patch(self.url, data, etag=etag)
+        doc = {k:v for k,v in data.items() if v is not None}
+        files = {name: BytesIO(doc.pop(name)) for name, value in data.items() if isinstance(value, bytes)}
+        data = to_data_dict(doc)
+
+        with self.session.Client() as client:
+            resp = client.patch(self.url, data=data, files=files, headers=headers)
+            resp.raise_for_status()
         self.pull()
 
     def delete(self, verification=None):
         if verification is not None and verification != self._id:
             print(verification)
             return False
-        self._deleted = self._http_client.delete(self.url, etag=self._etag)
+        headers ={}
+        if self._version == self._latest_version:
+            headers["If-Match"] = self._etag
+        with self.session.Client() as client:
+            resp = client.delete(self.url, headers=headers)
+            self._deleted = True
         return self._deleted
 
-    def clone(self):
-        data = {k: getattr(self, k) for k in self.schema}
-        return self.__class__(**data)
+    # def clone(self, **kwargs):
+    #     data = {k: getattr(self, k) for k in self.schema}
+    #     data.update(kwargs)
+    #     return self.__class__(**data)
 
     @param.depends("_delete_requested")
     def buttons(self):
@@ -249,7 +285,7 @@ class EveItem(EveModelBase):
                            show_name=False,
                            default_layout=pn.Row)
 
-        delete_button = pn.widgets.Button(name="Remove")
+        delete_button = pn.widgets.Button(name="Remove", align="center", max_width=50)
         verification = pn.widgets.TextInput(placeholder="Enter item id here to enable deletion.")
         row = pn.Row(param_buttons, verification, delete_button)
         if self._deleted:
@@ -293,6 +329,7 @@ class EveItem(EveModelBase):
                            sizing_mode=self.sizing_mode,
                            width=self.max_width,
                            )
+        # media_previews = 
         return pn.Column(header,
                         editors,
                         self.buttons,

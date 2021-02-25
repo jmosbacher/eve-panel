@@ -6,9 +6,8 @@ import param
 
 from .settings import config as settings
 from .eve_model import EveModelBase
-from .http_client import DEFAULT_HTTP_CLIENT, EveHttpClient
 from .item import EveItem
-
+from .utils import NumpyJSONENncoder, to_data_dict, to_json_compliant
 
 class EvePage(EveModelBase):
     fields = param.List(default=["_id"])
@@ -45,6 +44,11 @@ class EvePage(EveModelBase):
     def to_records(self):
         return [item.to_dict() for item in self.values()]
 
+    def to_json(self):
+        objs = [item.to_dict() for item in self.values()]
+        return json.dumps(objs, cls=NumpyJSONENncoder)
+    
+
     def to_file(self, indent=4):
         docs = self.to_records()
         f = StringIO(json.dumps(docs, indent=indent))
@@ -66,11 +70,11 @@ class EvePage(EveModelBase):
         for name in names:
             self._items[name].push()
 
-    def pull(self, names=None, version=1):
+    def pull(self, names=None):
         if names is None:
             names = self.keys()
         for name in names:
-            self._items[name].pull(version=version)
+            self._items[name].pull()
 
     @param.depends("_items")
     def widgets_view(self):
@@ -102,7 +106,7 @@ class EvePage(EveModelBase):
 
     @param.depends("_items")
     def json_view(self):
-        return pn.pane.JSON(self.to_records(),
+        return pn.pane.JSON(self.to_json(),
                             theme="light",
                             width_policy='max',
                             sizing_mode='stretch_width',
