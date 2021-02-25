@@ -151,7 +151,8 @@ class EveSessionBase(EveModelBase):
     
     def log_error(self, msg):
         self.log = "\n".join([str(msg), self.log])
-        if len(lines := self.log.split("\n"))> settings.MAX_LOG_SIZE:
+        lines = self.log.split("\n")
+        if len(lines)> settings.MAX_LOG_SIZE:
             self.log = "\n".join(lines[:settings.MAX_LOG_SIZE])
 
     def clear_messages(self):
