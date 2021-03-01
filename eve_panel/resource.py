@@ -14,6 +14,7 @@ from typing import Union, List, Dict, Tuple
 import multiprocessing as mp
 from tqdm.autonotebook import tqdm
 
+from .widgets import Progress
 from .settings import config as settings
 from .eve_model import EveModelBase
 from .field import SUPPORTED_SCHEMA_FIELDS, TYPE_MAPPING, Validator
@@ -30,6 +31,9 @@ try:
     yaml.indent(mapping=4, sequence=4, offset=2)
 except ImportError:
     import yaml
+
+from concurrent.futures import ThreadPoolExecutor
+
 
 class EveResource(EveModelBase):
     """
@@ -53,6 +57,7 @@ class EveResource(EveModelBase):
     schema = param.Dict(default={}, constant=True, precedence=-1)
 
     _cache = param.ClassSelector(class_=EvePageCache, default=EvePageCache())
+    _cache_raw = param.Dict({})
     _item_class = param.ClassSelector(EveItem,
                                       is_instance=False,
                                       precedence=-1)
@@ -223,11 +228,13 @@ class EveResource(EveModelBase):
     @param.depends("page_number")
     def gui_progress(self):
         if self._progress is None:
-            self._progress = pn.indicators.Progress(max=1, active=self._active, align="end")
-        if self.page_number > self._progress.max:
-            self._progress.max = len(self.page_numbers)
-        self._progress.value = self.page_number
-        return self._progress
+            self._progress = pn.indicators.Progress(value=0, active=self._active, align="center")
+        npages = 0
+        if self.page_number:
+            npages = len(self.page_numbers)
+            if npages:
+                self._progress.value = int(100*self.page_number/npages)
+        return pn.Row(self._progress, f"[{self.page_number or 'NA'} / {npages or 'NA'}]")
 
     def read_clipboard(self):
         """Read clipboard into uplaod buffer.
@@ -296,70 +303,120 @@ class EveResource(EveModelBase):
             yield from page.items()
 
     def records(self):
-        for page in self.pages():
-            yield from page.records()
+        for page in self.pages_raw():
+            yield from page
 
-    def get_progress_bar_cb(self, total=100, step=1, desc=None, unit=None):
-        pbar = tqdm(total=total, desc=desc, unit=unit)
-        def cb(idx):
-            pbar.update(step)
-        return cb
+    def init_pbar(self, class_):
+        if class_ is None:
+            class_ = tqdm
+        pbar = class_(total=self.nitems, 
+                    desc=f"Fetching {self.name.lower().replace('_', ' ')} documents", 
+                    unit="docs")
+        pbar.reset()
+        return pbar
 
-    def pages(self, start=1, end=None, use_async=True, cb=None):
-        if use_async:
-            pages = asyncio.run(self.pages_async(start=start, end=end, cb=cb))
-            yield from pages
-        else:
-            page_numbers = self.page_numbers
-            if cb is None:
-                cb = self.get_progress_bar_cb(total=len(page_numbers)*self.items_per_page, step=self.items_per_page,
-                        desc=f"Fetching {self.name.lower().replace('_', '')} documents", unit="docs")
-            for idx in page_numbers:
-                if idx<start:
-                    continue
-                if end is not None and idx > end:
-                    break
-                page = self.get_page(idx, cb=True)
-                if not len(page):
-                    break
-                yield page
+    def pages_raw(self, start=1, end=None, asynchronous=True, executor=None, pbar=None):
+        pbar = self.init_pbar(pbar)
 
-    async def pages_async(self, start=1, end=None, cb=None):
-        aws = []
-        page_numbers = self.page_numbers
-        if cb is None:
-            cb = self.get_progress_bar_cb(total=len(page_numbers)*self.items_per_page, step=self.items_per_page, 
-                desc=f"Fetching {self.name.lower().replace('_', ' ')} documents", unit="docs")
-            
-        for idx in page_numbers:
+        if asynchronous and executor is None:
+            executor = ThreadPoolExecutor(max_workers=8)
+        
+        futures = []
+        for idx in self.page_numbers:
             if idx<start:
                 continue
             if end is not None and idx > end:
                 break
-            aws.append(self.get_page_async(idx, cb=cb))
-        pages = await asyncio.gather(*aws)
-        return pages
+            if asynchronous:
+                future = executor.submit(self.get_page_raw, idx)
+                futures.append(future)
+            else:
+                page = self.get_page_raw(idx)
+                if page:
+                    pbar.update(len(page))
+                    yield page
+                else:
+                    break
+
+        for future in futures:
+            page = future.result()
+            if page:
+                pbar.update(len(page))
+                yield page
+
+    def pages(self, start=1, end=None, asynchronous=True, executor=None, pbar=None):
+        
+        pbar = self.init_pbar(pbar)
+
+        if asynchronous and executor is None:
+            executor = ThreadPoolExecutor(max_workers=8)
+        
+        futures = []
+        for idx in self.page_numbers:
+            if idx<start:
+                continue
+            if end is not None and idx > end:
+                break
+            if asynchronous:
+                future = executor.submit(self.get_page, idx)
+                futures.append(future)
+            else:
+                page = self.get_page(idx)
+                if not len(page):
+                    break
+                pbar.update(len(page))
+                yield page
+
+        for future in futures:
+            page = future.result()
+            pbar.update(len(page))
+            yield page
+
+    async def pages_async(self, start=1, end=None, pbar=tqdm):
+
+        pbar = self.init_pbar(pbar)
+
+        aws = []
+        for idx in self.page_numbers:
+            if idx<start:
+                continue
+            if end is not None and idx > end:
+                break
+            aws.append(self.get_page_async(idx))
+
+        for coro in asyncio.as_completed(aws):
+            page = await coro
+            pbar.update(len(page))
+            yield page
 
     def new_item(self, data={}):
         item = self.item_class(**data)
         self[item._id] = item
 
-    def to_records(self):
-        return [item.to_dict() for item in self.values()]
-
-    def to_dataframe(self, start=1, end=None, cb=None, use_async=True):
-        df = pd.concat([page.to_dataframe() for page in 
-                        self.pages(use_async=use_async, start=start, end=end, cb=cb)])
+    def to_records(self, start=1, end=None, asynchronous=True, executor=None, pbar=None):
+        records = []
+        for page in self.pages_raw(start=start, end=end, asynchronous=asynchronous,
+                        executor=executor, pbar=pbar):
+            records.extend(page)
+        return records
+     
+    def to_dataframe(self, start=1, end=None, asynchronous=True, executor=None, pbar=None):
+        df = pd.DataFrame(self.to_records(start=start, end=end, asynchronous=asynchronous,
+                        executor=executor, pbar=pbar))
+        df = df[[col for col in df.columns if col in self.schema]]
         if "_id" in df.columns:
             df = df.set_index("_id")
         return df
    
-    def to_dask(self, pages=None, persist=False):
+    def to_dask(self, pages=None, persist=False, progress=True):
         try:
             import dask
+
         except ImportError:
             raise RuntimeError("Dask is not installed.")
-
+        if progress:
+            from dask.diagnostics import ProgressBar
+            ProgressBar().register()
         if pages is None:
             pages = self.page_numbers
         columns = [(k, DASK_TYPE_MAPPING[v["type"]]) for k,v in self.schema.items() 
@@ -740,6 +797,19 @@ class EveResource(EveModelBase):
         self.upload_errors = [str(err) for err in errors]
         return success
 
+    def pull_page_raw(self, idx=1, cache_result=True, timeout=None):
+        if not idx:
+            return False
+        page = self.find(query=self.filters,
+                        projection=self.projection,
+                        sort=",".join(self.sorting),
+                        max_results=self.items_per_page,
+                        page_number=idx,
+                        timeout=timeout)
+        if page and cache_result:
+            self._cache_raw[idx] = page
+        return page
+
     def pull_page(self, idx=0, cache_result=True, timeout=None):
         if not idx and cache_result:
             self._cache[idx] = PageZero()
@@ -784,20 +854,33 @@ class EveResource(EveModelBase):
             return
         self._cache[idx].push()
 
-    def get_page(self, idx):
+    def get_page_raw(self, idx, pbar=None):
+        if idx not in self._cache or not len(self._cache[idx]):
+            self.pull_page_raw(idx)
+        page = self._cache_raw.get(
+            idx, [])
+        if pbar is not None:
+            pbar.update(len(page))
+        return page
+
+    def get_page(self, idx, pbar=None):
         if idx not in self._cache or not len(self._cache[idx]):
             self.pull_page(idx)
-        return self._cache.get(
+        page = self._cache.get(
             idx, EvePage(name="Place holder", fields=self.fields))
+        if pbar is not None:
+            pbar.update(len(page))
+        return page
 
-    async def get_page_async(self, idx, cb=None, timeout=None):
+    async def get_page_async(self, idx, pbar=None, timeout=None):
         if idx not in self._cache or not len(self._cache[idx]):
             await self.pull_page_async(idx, timeout=timeout)
         
         page = self._cache.get(
             idx, EvePage(name="Place holder", fields=self.fields))
-        if len(page) and callable(cb):
-            cb(idx)
+
+        if pbar is not None:
+            pbar.update(len(page))
         return page
 
     def get_page_records(self, idx):
@@ -1163,13 +1246,13 @@ class EveResource(EveModelBase):
                            width_policy='max',
                            sizing_mode=self.sizing_mode,
                            width=int(self.max_width/2),
-                           min_width=300,
+                           min_width=350,
                            max_width=int(self.max_width/1.5))
 
         header = pn.Row(
             f'## {self.name.replace("_", " ").title()} resource',
             pn.Spacer(sizing_mode='stretch_both'),
-            pn.Column(pn.Spacer(), self.gui_progress, pn.Spacer()),
+            pn.Column(pn.Spacer(), self.gui_progress, pn.Spacer(), align="center"),
            
             buttons,
             pn.Spacer(sizing_mode='stretch_both'),

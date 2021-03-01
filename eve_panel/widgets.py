@@ -86,3 +86,28 @@ def get_widget(name, schema):
         return LiteralSchemaInput(name, schema, list)
     else:
         return WIDGET_MAPPING.get(schema["type"], None)
+
+class Progress(param.Parameterized):
+    value = param.Integer(0)
+    total = param.Integer(100)
+    active = param.Boolean(False)
+    desc = param.String("Loading")
+    unit = param.String("iterations")
+    
+    def __call__(self, **params):
+        self.param.set_param(**params)
+        return self
+    
+    @param.depends("value", "total", "active")
+    def view(self):
+        perc = int(100*self.value/self.total)
+        text = f"{perc}% [{self.value}/{self.total} {self.unit}]"
+        ind = pn.indicators.Progress(value=perc, active=self.active, sizing_mode="stretch_width")
+        
+        return pn.Row(self.desc, ind, text, sizing_mode="stretch_width")
+    
+    def update(self, inc=1):
+        self.value = self.value + inc
+    
+    def reset(self):
+        self.value = 0

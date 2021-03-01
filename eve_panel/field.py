@@ -44,21 +44,30 @@ def EveField(name, schema, klass):
     def _validate(self, val):
         if self.allow_None and val is None:
             return
+
         if self.owner is None:
             return
+
         if self.name is None:
             return
-        
-        if not self.validator.validate({"value": val}):
-            sep = "\n"
-            errors = [
-                f"Cannot set \'{self.owner.name}.{self.name}\' to \'{val}\' of type {type(val)}."
-            ]
-            for k, v in self.validator.errors.items():
-                errors.append(f"{k} {v}")
-            if len(errors) <= 2:
-                sep = ". "
-            raise ValueError(" ".join(errors))
+
+        try:
+            if not self.validator.validate({"value": val}):
+                sep = "\n"
+                errors = [
+                    f"Cannot set \'{self.owner.name}.{self.name}\' to \'{val}\' of type {type(val)}."
+                ]
+                for k, v in self.validator.errors.items():
+                    errors.append(f"{k} {v}")
+                if len(errors) <= 2:
+                    sep = ". "
+                raise ValueError(" ".join(errors))
+        except ValueError:
+            raise
+        except Exception:
+            pass
+ 
+
     params = {
         # "_schema": schema,
         "_validate": _validate,
