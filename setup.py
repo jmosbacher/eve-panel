@@ -24,9 +24,9 @@ if os.path.exists(readme_path):
 setup(
     long_description=readme,
     name='eve_panel',
-    version='0.3.9',
+    version='0.3.12',
     description='Top-level package for Eve-Panel.',
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     project_urls={"documentation": "https://eve-panel.readthedocs.io", "homepage": "https://jmosbacher.github.io/eve-panel"},
     author='Yossi Mosbacher',
     author_email='joe.mosbacher@gmail.com',
@@ -35,6 +35,6 @@ setup(
     packages=['eve_panel', 'eve_panel.auth'],
     package_dir={"": "."},
     package_data={},
-    install_requires=['authlib==0.*,>=0.15.3', 'dask', 'eve==1.*,>=1.1.3', 'httpx==0.*,>=0.16.1', 'pandas', 'panel==0.*,>=0.10.1'],
+    install_requires=['authlib==0.*,>=0.15.3', 'dask', 'eve==1.*,>=1.1.3', 'httpx==0.*,>=0.16.1', 'pandas', 'panel==0.*,>=0.11.0'],
     extras_require={"dev": ["bumpversion", "coverage", "flake8", "invoke", "isort", "nbsphinx", "numpydoc", "pylint", "pytest", "sphinx", "sphinx-material", "tox", "yapf"], "full": ["hvplot"], "plotting": ["hvplot"]},
 )
