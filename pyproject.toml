@@ -29,11 +29,11 @@ eve = "^1.1.3"
 panel = "^0.11"
 httpx = "^0.16.1"
 pandas = "*"
-
+Authlib = "^0.15.3"
 # optional
 dask = { optional = true, version = "*" }
 hvplot = { optional = true, version = "*" }
-Authlib = "^0.15.3"
+
 
 
 [tool.poetry.dev-dependencies]
