@@ -494,13 +494,14 @@ class EveResource(EveModelBase):
     
     def post_with_files(self, docs):
         success, failed, errors = [], [], []
-        with self.session.Client() as client:
+        with self.session.Client(headers={"Content-Type": "application/json"}) as client:
             for doc in docs:
                 files = {name: BytesIO(doc.pop(name)) for name in self._file_fields if name in doc}
                 data = to_data_dict(doc)
                
                 try:
-                    resp = client.post(self._url, data=data, files=files)
+                    resp = client.post(self._url, data=data, files=files,
+                                 )
                     success.append(doc)
                 except Exception as e:
                     failed.append(doc)
@@ -510,8 +511,8 @@ class EveResource(EveModelBase):
 
     def post_batched(self, docs):
         data = json.dumps(docs, cls=NumpyJSONENncoder)
-        with self.session.Client() as client:
-            resp = client.post(self._url, data=data, )
+        with self.session.Client(headers={"Content-Type": "application/json"}) as client:
+            resp = client.post(self._url, data=data,)
         success, failed, errors = [], [], []
         for doc, result in zip(docs, resp.json()["_items"]):
             if result["_status"]=="OK":

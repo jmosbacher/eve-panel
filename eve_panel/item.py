@@ -221,7 +221,7 @@ class EveItem(EveModelBase):
         ]
 
     def push(self):
-        headers ={}
+        headers = {"Content-Type": "application/json"}
         if self._version == self._latest_version:
             headers["If-Match"] = self._etag
         data = {k: getattr(self, k) for k in self.schema if not k.startswith("_")}
@@ -230,12 +230,12 @@ class EveItem(EveModelBase):
                     if isinstance(value, bytes)}
         data = to_data_dict(doc)
         
-        with self.session.Client() as client:
-            resp = client.put(self.url, data=data, files=files, headers=headers)
+        with self.session.Client(headers=headers) as client:
+            resp = client.put(self.url, data=data, files=files, )
         self.pull()
 
     def patch(self, *fields):
-        headers ={}
+        headers = {"Content-Type": "application/json"}
         if self._version == self._latest_version:
             headers["If-Match"] = self._etag
             

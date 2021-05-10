@@ -246,11 +246,10 @@ class EveSessionBase(EveModelBase):
         return {}
 
     def post(self, url, data="", json={}, timeout=10, **kwargs):
-        with self.Client() as client:
+        with self.Client(headers={"Content-Type": "application/json"}) as client:
             resp = client.post(url,
                                 data=data,
                                 json=json,
-                                headers=self.headers(),
                                 timeout=timeout,
                                 **kwargs)
             if resp.is_error:
@@ -261,11 +260,10 @@ class EveSessionBase(EveModelBase):
                 return True
 
     async def post_async(self, url, data="", json={}, timeout=10, **kwargs):
-        with self.AsyncClient() as client:
+        with self.AsyncClient(headers={"Content-Type": "application/json"}) as client:
             resp = await client.post(url,
                                 data=data,
                                 json=json,
-                                headers=self.headers(),
                                 timeout=timeout,
                                 **kwargs)
             if resp.is_error:
@@ -276,7 +274,7 @@ class EveSessionBase(EveModelBase):
                 return True
 
     def put(self, url, data={}, etag=None, timeout=10, headers={}, **kwargs):
-        with self.Client() as client:
+        with self.Client(headers={"Content-Type": "application/json"}) as client:
             if etag:
                 headers["If-Match"] = etag
             resp = client.put(url,
@@ -293,7 +291,7 @@ class EveSessionBase(EveModelBase):
 
 
     def patch(self, url, data, etag=None, timeout=10, headers={}, **kwargs):
-        with self.Client() as client:
+        with self.Client(headers={"Content-Type": "application/json"}) as client:
             if etag:
                 headers["If-Match"] = etag
             try:
