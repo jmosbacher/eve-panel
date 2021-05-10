@@ -514,7 +514,13 @@ class EveResource(EveModelBase):
         with self.session.Client(headers={"Content-Type": "application/json"}) as client:
             resp = client.post(self._url, data=data,)
         success, failed, errors = [], [], []
-        for doc, result in zip(docs, resp.json()["_items"]):
+        results = resp.json()
+        if "_items" in results:
+            results = results["_items"]
+        else:
+            results = [results]
+
+        for doc, result in zip(docs, results):
             if result["_status"]=="OK":
                 success.append(doc)
             else:
