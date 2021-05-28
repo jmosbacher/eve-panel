@@ -182,7 +182,7 @@ class EveItem(EveModelBase):
                     if param.constant or param.readonly:
                         setattr(self, getattr(param, "_internal_name"), v)
                     else:
-                        self.param.set_param(k=v)
+                        self.param.set_param(**{k:v})
                 except Exception as e:
                     logger.error(str(e))
                     pass
@@ -229,7 +229,7 @@ class EveItem(EveModelBase):
         files = {name: BytesIO(doc.pop(name)) for name, value in data.items()
                     if isinstance(value, bytes)}
         data = to_data_dict(doc)
-        
+        data = json.dumps(data, cls=NumpyJSONENncoder)
         with self.session.Client(headers=headers) as client:
             resp = client.put(self.url, data=data, files=files, )
         self.pull()
@@ -245,6 +245,7 @@ class EveItem(EveModelBase):
         doc = {k:v for k,v in data.items() if v is not None}
         files = {name: BytesIO(doc.pop(name)) for name, value in data.items() if isinstance(value, bytes)}
         data = to_data_dict(doc)
+        data = json.dumps(data, cls=NumpyJSONENncoder)
 
         with self.session.Client() as client:
             resp = client.patch(self.url, data=data, files=files, headers=headers)
