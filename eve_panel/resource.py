@@ -497,7 +497,7 @@ class EveResource(EveModelBase):
         with self.session.Client(headers={"Content-Type": "application/json"}) as client:
             for doc in docs:
                 files = {name: BytesIO(doc.pop(name)) for name in self._file_fields if name in doc}
-                data = to_data_dict(doc)
+                data = json.dumps(docs, cls=NumpyJSONENncoder)
                
                 try:
                     resp = client.post(self._url, data=data, files=files,

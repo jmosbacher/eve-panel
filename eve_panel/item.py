@@ -228,7 +228,7 @@ class EveItem(EveModelBase):
         doc = {k:v for k,v in data.items() if v is not None}
         files = {name: BytesIO(doc.pop(name)) for name, value in data.items()
                     if isinstance(value, bytes)}
-        data = to_data_dict(doc)
+        # data = to_data_dict(doc)
         data = json.dumps(data, cls=NumpyJSONENncoder)
         with self.session.Client(headers=headers) as client:
             resp = client.put(self.url, data=data, files=files, )
@@ -244,7 +244,7 @@ class EveItem(EveModelBase):
             data[k] = getattr(self, k)
         doc = {k:v for k,v in data.items() if v is not None}
         files = {name: BytesIO(doc.pop(name)) for name, value in data.items() if isinstance(value, bytes)}
-        data = to_data_dict(doc)
+        # data = to_data_dict(doc)
         data = json.dumps(data, cls=NumpyJSONENncoder)
 
         with self.session.Client() as client:
