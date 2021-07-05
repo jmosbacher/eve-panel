@@ -33,10 +33,10 @@ def EveField(name, schema, klass):
     if not isinstance(klass, type):
         return klass
     schema = {k: v for k, v in schema.items() if k in SUPPORTED_SCHEMA_FIELDS}
-    if schema["type"] in COERCERS:
-        schema["coerce"] = COERCERS[schema["type"]]
-    if schema["type"] in TYPE_MAPPING:
-        schema["type"] = TYPE_MAPPING[schema["type"]]
+    if schema.get('type', 'string') in COERCERS:
+        schema["coerce"] = COERCERS[schema.get('type', 'string')]
+    if schema.get('type', 'string') in TYPE_MAPPING:
+        schema['type'] = TYPE_MAPPING[schema.get('type', 'string')]
     
 
     # validator = Validator({"value": schema})

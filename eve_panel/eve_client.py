@@ -6,10 +6,10 @@ Client for single or multiple Eve APIs.
 
 from pprint import pprint
 
-import eve
 import panel as pn
 import param
 from collections import defaultdict
+import httpx
 
 from .eve_model import EveModelBase
 from .session import DEFAULT_SESSION_CLASS, EveSessionBase
@@ -71,6 +71,13 @@ class EveClient(EveModelBase):
         klass = type(name.title() + "Client", (cls, ), params)
         instance = klass(name=name, session=session, **kwargs)
         return instance
+
+    @classmethod
+    def from_server(cls, url, **kwargs):
+        r = httpx.get(url)
+        r.raise_for_status()
+        domain = r.json()
+        return cls.from_domain_def(domain_def=domain, **kwargs)
 
     @classmethod
     def from_app(cls, app, **kwargs):

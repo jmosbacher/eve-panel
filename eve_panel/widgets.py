@@ -80,12 +80,12 @@ WIDGET_MAPPING = {
 
 
 def get_widget(name, schema):
-    if schema["type"] == "dict" and "schema" in schema:
+    if schema.get('type', 'string') == "dict" and "schema" in schema:
         return LiteralSchemaInput(name, schema, dict)
-    elif schema["type"] == "list" and "schema" in schema:
+    elif schema.get('type', 'string') == "list" and "schema" in schema:
         return LiteralSchemaInput(name, schema, list)
     else:
-        return WIDGET_MAPPING.get(schema["type"], None)
+        return WIDGET_MAPPING.get(schema.get('type', 'string'), None)
 
 class Progress(param.Parameterized):
     value = param.Integer(0)

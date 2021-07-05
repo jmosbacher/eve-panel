@@ -193,7 +193,7 @@ class EveResource(EveModelBase):
     
     @property
     def is_tabular(self):
-        return not any([v["type"] in ['list', 'dict'] for v in self.schema.values()])
+        return not any([v.get('type', 'dict') in ['list', 'dict'] for v in self.schema.values()])
 
     @property
     def page_numbers(self):
@@ -219,7 +219,7 @@ class EveResource(EveModelBase):
 
     @property
     def _file_fields(self):
-        return [k for k,v in self.schema.items() if v["type"]=="media"]
+        return [k for k,v in self.schema.items() if v.get("type", 'string')=="media"]
     
     @property    
     def _files(self):
@@ -419,7 +419,7 @@ class EveResource(EveModelBase):
             ProgressBar().register()
         if pages is None:
             pages = self.page_numbers
-        columns = [(k, DASK_TYPE_MAPPING[v["type"]]) for k,v in self.schema.items() 
+        columns = [(k, DASK_TYPE_MAPPING[v.get("type", 'string')]) for k,v in self.schema.items() 
                                     if k in self.fields and not k.startswith("_")]
         column_types = dict(columns)
 
@@ -1258,11 +1258,11 @@ class EveResource(EveModelBase):
 
         header = pn.Row(
             f'## {self.name.replace("_", " ").title()} resource',
-            pn.Spacer(sizing_mode='stretch_both'),
+            pn.Spacer(),
             pn.Column(pn.Spacer(), self.gui_progress, pn.Spacer(), align="center"),
            
             buttons,
-            pn.Spacer(sizing_mode='stretch_both'),
+            pn.Spacer(),
             align="center",
             
         )

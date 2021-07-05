@@ -86,9 +86,9 @@ class EveItem(EveModelBase):
                 class_ = param.Selector
                 kwargs["objects"] = field_schema["allowed"]
 
-            elif field_schema["type"] in TYPE_MAPPING:
+            elif field_schema.get("type", 'string') in TYPE_MAPPING:
                 class_ = EveField(extended_name, field_schema,
-                                  TYPE_MAPPING[field_schema["type"]])
+                                  TYPE_MAPPING[field_schema.get("type", 'string')])
             else:
                 continue
             if "default" in field_schema:

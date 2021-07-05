@@ -20,7 +20,9 @@ class EveSessionBase(EveModelBase):
         # "Content-Type": "application/json",
     }
 
+
     log = param.String()
+    extra_client_kwargs = param.Dict(default={}, precedence=-1)
 
     auth_schemes = param.Dict(default={}, precedence=-1)
     auth_scheme = param.Selector(default=DEFAULT_AUTH, objects=list(AUTH_CLASSES))
@@ -196,6 +198,7 @@ class EveSessionBase(EveModelBase):
         user_headers = dict(headers)
         headers = self.headers
         headers.update(user_headers)
+        kwargs = dict(self.extra_client_kwargs, **kwargs)
         kwargs["headers"] = headers
         kwargs["base_url"] = kwargs.get("base_url", self.server_url)
         kwargs["app"] = kwargs.get("app", self.app)

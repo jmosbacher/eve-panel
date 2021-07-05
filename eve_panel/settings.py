@@ -6,7 +6,7 @@ MAX_LOG_SIZE = 20
 MAX_MESSAGES = 3
 META_FIELDS = ["_version", "_latest_version", "_etag", "_created"]
 SHOW_INDICATOR = True
-SIZING_MODE = "stretch_width"
+SIZING_MODE = "stretch_both"
 DEBUG = False
 
 import param
