@@ -10,6 +10,7 @@ from .base import EveAuthBase, EveNoAuth
 from .basic_auth import EveBasicAuth
 from .bearer import EveBearerAuth
 from .oauth2 import Oauth2DeviceFlow
+from .panel_oauth import EvePanelAuth
 
 log = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ AUTH_CLASSES = {
     None: EveNoAuth,
     "Basic": EveBasicAuth,
     "Bearer": EveBearerAuth,
+    "Panel": EvePanelAuth,
     "Oauth2 Device Flow": Oauth2DeviceFlow,
 }
 

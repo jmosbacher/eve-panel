@@ -90,7 +90,8 @@ class EveItem(EveModelBase):
                 class_ = EveField(extended_name, field_schema,
                                   TYPE_MAPPING[field_schema.get("type", 'string')])
             else:
-                continue
+                class_ = param.Parameter
+
             if "default" in field_schema:
                 kwargs["default"] = field_schema["default"]
             else:
@@ -100,8 +101,7 @@ class EveItem(EveModelBase):
             if widget is not None:
                 _widgets[field_name] = widget
 
-            if field_schema.get("required", False):
-                kwargs["allow_None"] = False
+            kwargs["allow_None"] = field_schema.get("nullable", True)
 
             bounds = (field_schema.get("min",
                                        None), field_schema.get("max", None))

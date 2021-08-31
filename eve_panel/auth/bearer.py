@@ -50,3 +50,5 @@ class EveBearerAuth(EveAuthBase):
 
     def credentials_view(self):
         return self.panel()
+
+

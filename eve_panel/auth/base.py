@@ -35,6 +35,12 @@ class EveAuthBase(EveModelBase):
         """
         raise NotImplementedError
 
+    def login_cli(self):
+        return self.login()
+
+    def login_notebook(self):
+        return self.login()
+        
     def logout(self):
         """perform any actions required to logout.
 

@@ -3,6 +3,7 @@ import base64
 import panel as pn
 import param
 import getpass
+import time
 import logging
 import httpx
 import webbrowser
@@ -148,7 +149,7 @@ class Oauth2DeviceFlow(EveAuthBase):
 
     @property    
     def logged_in(self):
-        return bool(token)
+        return bool(self.token)
 
     def logout(self):
         self.token = ""
