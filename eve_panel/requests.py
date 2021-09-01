@@ -1,5 +1,6 @@
 
 import param
+from param.parameterized import String
 
 
 class EveRequest(param.Parameterized):
@@ -35,11 +36,30 @@ class EvePut(EveRequest):
 class EvePatch(EveRequest):
     method = "PATCH"
 
-
 class EveDelete(EveRequest):
     method = "DELETE"
 
 
 class EveRespone(param.Parameterized):
     request = param.ClassSelector(EveRequest)
-    
+    code = None
+class EveErrorResponse(EveRespone):
+    _status = param.String()
+    _error = param.Dict()
+
+class EvePostResponse(EveRespone):
+    code = 201
+
+class EveGetResponse(EveRespone):
+    code = 200
+
+class EvePutResponse(EveRespone):
+    code = 200
+
+class EvePatchResponse(EveRespone):
+    code = 200
+
+class EveDeleteResponse(EveRespone):
+    code = 204
+
+
