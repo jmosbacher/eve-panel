@@ -55,9 +55,6 @@ class EveResource(EveModelBase):
     upload_errors = param.List(default=[])
     _resource_def = param.Dict(default={}, constant=True, precedence=-1)
     schema = param.Dict(default={}, constant=True, precedence=-1)
-
-    _cache = param.ClassSelector(class_=EvePageCache, default=EvePageCache())
-    _cache_raw = param.Dict({})
     _item_class = param.ClassSelector(EveItem,
                                       is_instance=False,
                                       precedence=-1)
@@ -135,8 +132,6 @@ class EveResource(EveModelBase):
         return instance
 
     def __getitem__(self, key):
-        if key in self._cache:
-            return self._cache[key]
         data = self.session.get("/".join([self._url, key]))
         if data:
             if self._file_fields:
@@ -148,9 +143,6 @@ class EveResource(EveModelBase):
             item = self.make_item(**data)
             return item
         raise KeyError
-
-    def __setitem__(self, key, value):
-        self._cache[key] = value
 
     def __iter__(self):
         yield from self.values()
@@ -465,20 +457,6 @@ class EveResource(EveModelBase):
         if persist:
             return df.persist()
         return df
-
-   
-    def pull(self, start=1, end=None):
-        for idx in itertools.count(start):
-            if end is not None and idx > end:
-                break
-            if not self.pull_page(idx):
-                break
-    
-    def push(self, idxs=None):
-        if idxs is None:
-            idxs = list(self._cache.keys())
-        for idx in idxs:
-            self._cache[idx].push()
 
     def get(self, timeout=None, **params):
         params = {k:v if isinstance(v, str) else json.dumps(v, cls=NumpyJSONENncoder) for k,v in params.items()}
@@ -804,47 +782,6 @@ class EveResource(EveModelBase):
         self.upload_errors = [str(err) for err in errors]
         return success
 
-    def pull_page_raw(self, idx=1, cache_result=True, timeout=None):
-        if not idx:
-            return False
-        page = self.find(query=self.filters,
-                        projection=self.projection,
-                        sort=",".join(self.sorting),
-                        max_results=self.items_per_page,
-                        page_number=idx,
-                        timeout=timeout)
-        if page and cache_result:
-            self._cache_raw[idx] = page
-        return page
-
-    def pull_page(self, idx=0, cache_result=True, timeout=None):
-        if not idx and cache_result:
-            self._cache[idx] = PageZero()
-            return False
-        page = self.find_page(query=self.filters,
-                              projection=self.projection,
-                              sort=",".join(self.sorting),
-                              max_results=self.items_per_page,
-                              page_number=idx,
-                              timeout=timeout)
-        if page._items and cache_result:
-            self._cache[idx] = page
-        return page
-
-    async def pull_page_async(self, idx=0, cache_result=True, timeout=None):
-        if not idx and cache_result:
-            self._cache[idx] = PageZero()
-            return False
-        page = await self.find_page_async(query=self.filters,
-                              projection=self.projection,
-                              sort=",".join(self.sorting),
-                              max_results=self.items_per_page,
-                              page_number=idx,
-                              timeout=timeout)
-        if page._items and cache_result:
-            self._cache[idx] = page
-        return page
-
     def get_page_kwargs(self, idx):
         kwargs =  dict(
             where=self.filters,
@@ -856,11 +793,6 @@ class EveResource(EveModelBase):
         kwargs = {k:v if isinstance(v, str) else json.dumps(v) for k,v in kwargs.items()}
         return kwargs
 
-    def push_page(self, idx):
-        if not idx in self._cache or len(self._cache[idx]):
-            return
-        self._cache[idx].push()
-
     def get_page_raw(self, idx, pbar=None):
         if idx not in self._cache or not len(self._cache[idx]):
             self.pull_page_raw(idx)
@@ -870,23 +802,35 @@ class EveResource(EveModelBase):
             pbar.update(len(page))
         return page
 
-    def get_page(self, idx, pbar=None):
-        if idx not in self._cache or not len(self._cache[idx]):
-            self.pull_page(idx)
-        page = self._cache.get(
-            idx, EvePage(name="Place holder", fields=self.fields))
-        if pbar is not None:
+    def get_page(self, idx, pbar=None, timeout=None):
+        if not idx:
+            return PageZero()
+        page = self.find_page(query=self.filters,
+                              projection=self.projection,
+                              sort=",".join(self.sorting),
+                              max_results=self.items_per_page,
+                              page_number=idx,
+                              timeout=timeout)
+
+        if pbar is None:
+            return EvePage(name="Place holder", fields=self.fields)
+        elif pbar is not None:
             pbar.update(len(page))
         return page
 
     async def get_page_async(self, idx, pbar=None, timeout=None):
-        if idx not in self._cache or not len(self._cache[idx]):
-            await self.pull_page_async(idx, timeout=timeout)
-        
-        page = self._cache.get(
-            idx, EvePage(name="Place holder", fields=self.fields))
+        if not idx:
+            return PageZero()
+        page = await self.find_page_async(query=self.filters,
+                              projection=self.projection,
+                              sort=",".join(self.sorting),
+                              max_results=self.items_per_page,
+                              page_number=idx,
+                              timeout=timeout)
 
-        if pbar is not None:
+        if pbar is None:
+            return EvePage(name="Place holder", fields=self.fields)
+        elif pbar is not None:
             pbar.update(len(page))
         return page
 
@@ -926,22 +870,9 @@ class EveResource(EveModelBase):
         self.decrement_page()
         return self.current_page()
 
-    @param.depends("items_per_page",
-                   "filters",
-                   "fields",
-                   "sorting",
-                   watch=True)
     def clear_cache(self):
         self._cache = EvePageCache()
         self._plot = None
-
-    def reload_page(self, page_number=None):
-        if page_number is None:
-            page_number = self.page_number
-        if page_number in self._cache:
-            self._cache.pop(page_number)
-        self.pull_page(page_number)
-        self._cache = self._cache
 
     def remove_item(self, _id: str) -> bool:
         """Remove a single item from the database.
@@ -965,7 +896,6 @@ class EveResource(EveModelBase):
             EveResource: Filtered resource.
         """
         filtered = self.clone(filters=filters)
-        filtered.clear_cache()
         return filtered
 
     def project(self, *fields, **projection):

@@ -42,6 +42,7 @@ class Config(param.Parameterized):
     SHOW_INDICATOR = ConfigParameter(bool, env_prefix="eve_panel", default=True)
     SIZING_MODE = ConfigParameter(str, env_prefix="eve_panel", default="stretch_width")
     DEBUG = ConfigParameter(bool, env_prefix="eve_panel", default=False)
+    CACHING = ConfigParameter(bool, env_prefix="eve_panel", default=True)
     GUI_WIDTH = 1000
     GUI_HEIGHT = 400
     WIDGET_VIEW_ITEMS = 8
