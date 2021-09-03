@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 class EveItem(EveModelBase):
     session = param.ClassSelector(EveSessionBase, constant=True, precedence=-1)
     _resource_url = param.String(precedence=-1)
+    _id = param.String(allow_None=False, precedence=1)
     _etag = param.String(allow_None=True, precedence=15)
     _version = param.Integer(default=1,
                              bounds=(1, None),
