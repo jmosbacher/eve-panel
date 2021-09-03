@@ -169,7 +169,8 @@ class EveSessionBase(EveModelBase):
     def check_errors(self, response):
         try:
             response.raise_for_status()
-            if response.text:
+            response.read()
+            if response.json():
                 r = response.json()
                 if "_status" in r and r["_status"]=="ERR":
                     raise ServerError(r["_error"]["code"], r["_error"]["message"])
