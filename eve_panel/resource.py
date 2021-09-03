@@ -481,16 +481,20 @@ class EveResource(EveModelBase):
             self._cache[idx].push()
 
     def get(self, timeout=None, **params):
+        params = {k:v for k,v in params.items() if v is not None}
         params = {k:v if isinstance(v, str) else json.dumps(v, cls=NumpyJSONENncoder) for k,v in params.items()}
         with self.session.Client(timeout=timeout) as client:
             resp = client.get(self._url, params=params)
-        return resp.json()
+            data = resp.json()
+        return data
 
     async def get_async(self, timeout=None, **params):
+        params = {k:v for k,v in params.items() if v is not None}
         params = {k:v if isinstance(v, str) else json.dumps(v, cls=NumpyJSONENncoder) for k,v in params.items()}
         async with self.session.AsyncClient(timeout=timeout) as client:
             resp = await client.get(self._url, params=params)
-        return resp.json()
+            data = resp.json()
+        return data
     
     def post_with_files(self, docs):
         success, failed, errors = [], [], []
