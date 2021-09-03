@@ -1,7 +1,7 @@
 [tool]
 [tool.poetry]
 name = "eve_panel"
-version = "0.3.22"
+version = "0.3.23"
 homepage = "https://jmosbacher.github.io/eve-panel"
 documentation = "https://eve-panel.readthedocs.io"
 description = "Top-level package for Eve-Panel."
