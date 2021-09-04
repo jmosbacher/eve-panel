@@ -15,7 +15,7 @@ Todo:
 
 __author__ = """Yossi Mosbacher"""
 __email__ = 'joe.mosbacher@gmail.com'
-__version__ = '0.3.25'
+__version__ = '0.3.26'
 import panel as pn
 
 from .auth import EveAuthBase
