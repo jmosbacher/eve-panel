@@ -34,7 +34,12 @@ except ImportError:
 
 from concurrent.futures import ThreadPoolExecutor
 
-
+def not_empty(v):
+    if v is None:
+        return False
+    if isinstance(v, (list, dict, tuple)):
+        return bool(len(v))
+    return True
 class EveResource(EveModelBase):
     """
     Interface for an Eve resource.
@@ -481,7 +486,7 @@ class EveResource(EveModelBase):
             self._cache[idx].push()
 
     def get(self, timeout=None, **params):
-        params = {k:v for k,v in params.items() if v is not None}
+        params = {k:v for k,v in params.items() if not_empty(v)}
         params = {k:v if isinstance(v, str) else json.dumps(v, cls=NumpyJSONENncoder) for k,v in params.items()}
         with self.session.Client(timeout=timeout) as client:
             resp = client.get(self._url, params=params)
