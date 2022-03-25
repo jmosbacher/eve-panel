@@ -1,7 +1,5 @@
 import param
 from bson import objectid
-import numpy as np
-import pandas as pd
 import base64
 
 class CoerceClassSelector(param.ClassSelector):
@@ -39,12 +37,12 @@ TYPE_MAPPING = {
     "media": bytes_param,
 }
 
+
 DASK_TYPE_MAPPING = {
     "objectid": str,
     "boolean": bool,
     "binary": bytes,
-    "date": np.datetime64,
-    "datetime": np.datetime64,
+    
     "dict": dict,
     "float": float,
     "integer": int,
@@ -70,8 +68,7 @@ COERCERS = {
     "objectid": str,
     "boolean": bool,
     "binary": to_binary,
-    "date": pd.to_datetime,
-    "datetime": pd.to_datetime,
+
     "dict": dict,
     "float": float,
     "integer": int,
@@ -82,3 +79,20 @@ COERCERS = {
     "media": base64_to_binary,
 }
 
+try:
+    import numpy as np
+ 
+    DASK_TYPE_MAPPING["date"] = np.datetime64
+    DASK_TYPE_MAPPING["datetime"] = np.datetime64
+
+except ImportError:
+    pass
+
+try:
+    import pandas as pd
+
+    COERCERS["date"] = pd.to_datetime
+    COERCERS["datetime"] =  pd.to_datetime
+
+except ImportError:
+    pass

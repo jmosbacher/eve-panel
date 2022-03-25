@@ -1,9 +1,11 @@
 import yaml
 import json
-import pandas as pd
-
 
 def read_csv(f):
+    try:
+        import pandas as pd
+    except ImportError:
+        raise RuntimeError('Cannot read csv, pandas not installed.')
     df = pd.read_csv(f).dropna(axis=1, how="all")
     return df.to_dict(orient="records")
 

@@ -14,7 +14,6 @@ classifiers=[
     'License :: OSI Approved :: MIT License',
     'Natural Language :: English',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.6',
     'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
 ]
@@ -24,16 +23,14 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.7"
+python = ">=3.8,<3.11"
 eve = "^1.1.3"
 panel = "^0.12.1"
 httpx = "^0.16.1"
-pandas = "*"
 
 # optional
 dask = { optional = true, version = "*" }
 hvplot = { optional = true, version = "*" }
-Authlib = "^0.15.3"
 
 
 [tool.poetry.dev-dependencies]
@@ -49,7 +46,6 @@ tox = "*"
 yapf = "*"
 nbsphinx = "*"
 sphinx-material = "*"
-numpydoc = "*"
 
 [tool.poetry.extras]
 dask = ["dask[dataframe]"]
@@ -62,5 +58,5 @@ from = {format = "poetry", path = "pyproject.toml"}
 to = {format = "setuppy", path = "setup.py"}
 
 [build-system]
-requires = ["poetry>=0.12", "setuptools"]
-build-backend = "poetry.masonry.api"
+requires = ["poetry-core>=1.0.8", "setuptools"]
+build-backend = "poetry.core.masonry.api"

@@ -401,6 +401,11 @@ class EveResource(EveModelBase):
         return records
      
     def to_dataframe(self, start=1, end=None, asynchronous=True, executor=None, pbar=None):
+        try:
+            import pandas as pd
+        except:
+            raise RuntimeError('Padnas not installed.')
+
         df = pd.DataFrame(self.to_records(start=start, end=end, asynchronous=asynchronous,
                         executor=executor, pbar=pbar))
         df = df[[col for col in df.columns if col in self.schema]]
@@ -414,6 +419,11 @@ class EveResource(EveModelBase):
 
         except ImportError:
             raise RuntimeError("Dask is not installed.")
+        try:
+            import pandas as pd
+        except ImportError:
+            raise RuntimeError('Pandas not installed.')
+
         if progress:
             from dask.diagnostics import ProgressBar
             ProgressBar().register()
