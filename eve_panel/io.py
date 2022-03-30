@@ -1,9 +1,9 @@
 import yaml
 import json
-import pandas as pd
 
 
 def read_csv(f):
+    import pandas as pd
     df = pd.read_csv(f).dropna(axis=1, how="all")
     return df.to_dict(orient="records")
 

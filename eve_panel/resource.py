@@ -2,7 +2,6 @@ import itertools
 import json
 from io import BytesIO, StringIO
 import time
-import pandas as pd
 import panel as pn
 import param
 import yaml
@@ -406,6 +405,8 @@ class EveResource(EveModelBase):
         return records
      
     def to_dataframe(self, start=1, end=None, asynchronous=True, executor=None, pbar=None):
+        import pandas as pd
+
         df = pd.DataFrame(self.to_records(start=start, end=end, asynchronous=asynchronous,
                         executor=executor, pbar=pbar))
         df = df[[col for col in df.columns if col in self.schema]]

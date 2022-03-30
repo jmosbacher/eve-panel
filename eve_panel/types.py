@@ -1,7 +1,6 @@
 import param
 from bson import objectid
 import numpy as np
-import pandas as pd
 import base64
 
 class CoerceClassSelector(param.ClassSelector):
@@ -70,8 +69,6 @@ COERCERS = {
     "objectid": str,
     "boolean": bool,
     "binary": to_binary,
-    "date": pd.to_datetime,
-    "datetime": pd.to_datetime,
     "dict": dict,
     "float": float,
     "integer": int,
@@ -82,3 +79,9 @@ COERCERS = {
     "media": base64_to_binary,
 }
 
+try:
+    import pandas as pd
+    COERCERS["date"] = pd.to_datetime
+    COERCERS["datetime"] = pd.to_datetime
+except ImportError:
+    pass

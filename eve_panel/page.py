@@ -1,6 +1,5 @@
 from io import BytesIO, StringIO
 import json
-import pandas as pd
 import panel as pn
 import param
 
@@ -59,6 +58,8 @@ class EvePage(EveModelBase):
             yield item.to_dict()
 
     def to_dataframe(self):
+        import pandas as pd
+
         df = pd.DataFrame(self.to_records(), columns=self.fields)
         if "_id" in df.columns:
             df = df.set_index("_id")
