@@ -496,25 +496,27 @@ http2 = ["h2 (>=3,<5)"]
 
 [[package]]
 name = "hvplot"
-version = "0.7.3"
+version = "0.8.0"
 description = "A high-level plotting API for the PyData ecosystem built on HoloViews."
 category = "main"
 optional = true
-python-versions = ">=2.7"
+python-versions = ">=3.6"
 
 [package.dependencies]
 bokeh = ">=1.0.0"
 colorcet = ">=2"
 holoviews = ">=1.11.0"
 numpy = ">=1.15"
+packaging = "*"
 pandas = "*"
 
 [package.extras]
-all = ["coveralls", "dask", "datashader (>=0.6.5)", "flake8", "geopandas", "geoviews (>=1.6.0)", "intake", "intake-parquet", "intake-xarray", "keyring", "nbsite (>=0.5.1)", "nbsmoke (>=0.2.0)", "networkx", "nose", "notebook (>=5.4)", "numba (>=0.51.0)", "numpy (>=1.7)", "param (>=1.6.1)", "parameterized", "pillow", "pyct (>=0.4.4)", "pyepsg", "pytest", "python-snappy", "rasterio", "rfc3986", "s3fs", "scikit-image", "scipy", "selenium", "setuptools", "spatialpandas", "streamz (>=0.3.0)", "twine", "xarray"]
+all = ["cartopy (>=0.18.0)", "codecov", "dask (>=2021.3.0)", "datashader (>=0.6.5)", "fiona (>=1.8.18)", "flake8", "geopandas (>=0.9.0)", "geoviews (>=1.6.0)", "intake (>=0.6.5)", "intake-parquet (>=0.2.3)", "intake-xarray (>=0.5.0)", "matplotlib", "nbsite (>=0.7.1)", "nbsmoke (>=0.2.0)", "networkx (>=2.6.3)", "notebook (>=5.4)", "numba (>=0.51.0)", "numpy (>=1.7)", "param (>=1.6.1)", "parameterized", "pillow (>=8.2.0)", "plotly", "pooch", "pooch (>=1.6.0)", "pyct (>=0.4.4)", "pydata-sphinx-theme", "pyepsg (>=0.4.0)", "pygraphviz", "pyproj (>=3.0.1)", "pytest", "pytest-cov", "python-snappy (>=0.6.0)", "rasterio (>=1.2.6)", "s3fs (>=2022.1.0)", "scikit-image (>=0.17.2)", "scipy", "scipy (>=1.5.3)", "selenium (>=3.141.0)", "setuptools", "spatialpandas (>=0.4.3)", "sphinx-copybutton", "streamz (>=0.3.0)", "xarray", "xarray (>=0.18.2)"]
 build = ["param (>=1.6.1)", "pyct (>=0.4.4)", "setuptools"]
-doc = ["geoviews (>=1.6.0)", "numba (>=0.51.0)", "geopandas", "xarray", "networkx", "streamz (>=0.3.0)", "intake", "intake-parquet", "intake-xarray", "dask", "datashader (>=0.6.5)", "notebook (>=5.4)", "rasterio", "s3fs", "scipy", "pillow", "selenium", "spatialpandas", "scikit-image", "python-snappy", "pyepsg", "nbsite (>=0.5.1)"]
-examples = ["geoviews (>=1.6.0)", "numba (>=0.51.0)", "geopandas", "xarray", "networkx", "streamz (>=0.3.0)", "intake", "intake-parquet", "intake-xarray", "dask", "datashader (>=0.6.5)", "notebook (>=5.4)", "rasterio", "s3fs", "scipy", "pillow", "selenium", "spatialpandas", "scikit-image", "python-snappy", "pyepsg"]
-tests = ["coveralls", "nose", "flake8", "parameterized", "pytest", "nbsmoke (>=0.2.0)", "twine", "rfc3986", "keyring", "numpy (>=1.7)"]
+doc = ["geoviews (>=1.6.0)", "numba (>=0.51.0)", "geopandas (>=0.9.0)", "xarray (>=0.18.2)", "networkx (>=2.6.3)", "streamz (>=0.3.0)", "intake (>=0.6.5)", "intake-parquet (>=0.2.3)", "intake-xarray (>=0.5.0)", "dask (>=2021.3.0)", "datashader (>=0.6.5)", "notebook (>=5.4)", "rasterio (>=1.2.6)", "cartopy (>=0.18.0)", "pyproj (>=3.0.1)", "s3fs (>=2022.1.0)", "scipy (>=1.5.3)", "pillow (>=8.2.0)", "selenium (>=3.141.0)", "spatialpandas (>=0.4.3)", "scikit-image (>=0.17.2)", "python-snappy (>=0.6.0)", "pooch (>=1.6.0)", "fiona (>=1.8.18)", "pyepsg (>=0.4.0)", "matplotlib", "plotly", "pygraphviz", "nbsite (>=0.7.1)", "pydata-sphinx-theme", "sphinx-copybutton"]
+examples = ["geoviews (>=1.6.0)", "numba (>=0.51.0)", "geopandas (>=0.9.0)", "xarray (>=0.18.2)", "networkx (>=2.6.3)", "streamz (>=0.3.0)", "intake (>=0.6.5)", "intake-parquet (>=0.2.3)", "intake-xarray (>=0.5.0)", "dask (>=2021.3.0)", "datashader (>=0.6.5)", "notebook (>=5.4)", "rasterio (>=1.2.6)", "cartopy (>=0.18.0)", "pyproj (>=3.0.1)", "s3fs (>=2022.1.0)", "scipy (>=1.5.3)", "pillow (>=8.2.0)", "selenium (>=3.141.0)", "spatialpandas (>=0.4.3)", "scikit-image (>=0.17.2)", "python-snappy (>=0.6.0)", "pooch (>=1.6.0)", "fiona (>=1.8.18)", "pyepsg (>=0.4.0)", "matplotlib", "plotly"]
+examples_extra = ["geoviews (>=1.6.0)", "numba (>=0.51.0)", "geopandas (>=0.9.0)", "xarray (>=0.18.2)", "networkx (>=2.6.3)", "streamz (>=0.3.0)", "intake (>=0.6.5)", "intake-parquet (>=0.2.3)", "intake-xarray (>=0.5.0)", "dask (>=2021.3.0)", "datashader (>=0.6.5)", "notebook (>=5.4)", "rasterio (>=1.2.6)", "cartopy (>=0.18.0)", "pyproj (>=3.0.1)", "s3fs (>=2022.1.0)", "scipy (>=1.5.3)", "pillow (>=8.2.0)", "selenium (>=3.141.0)", "spatialpandas (>=0.4.3)", "scikit-image (>=0.17.2)", "python-snappy (>=0.6.0)", "pooch (>=1.6.0)", "fiona (>=1.8.18)", "pyepsg (>=0.4.0)", "matplotlib", "plotly", "pygraphviz"]
+tests = ["codecov", "flake8", "parameterized", "pytest", "pytest-cov", "nbsmoke (>=0.2.0)", "numpy (>=1.7)", "matplotlib", "plotly", "xarray", "pooch", "scipy"]
 
 [[package]]
 name = "idna"
@@ -1843,8 +1845,8 @@ httpx = [
     {file = "httpx-0.19.0.tar.gz", hash = "sha256:92ecd2c00c688b529eda11cedb15161eaf02dee9116712f621c70d9a40b2cdd0"},
 ]
 hvplot = [
-    {file = "hvplot-0.7.3-py2.py3-none-any.whl", hash = "sha256:09410f8f569b00fcf59dc7b6d976e0bddf722d21d8d86029b7408016ab7ca477"},
-    {file = "hvplot-0.7.3.tar.gz", hash = "sha256:74b269c6e118dd6f7d2a4039e91f16a193638f4119b4358dc6dbd58a2e71e432"},
+    {file = "hvplot-0.8.0-py2.py3-none-any.whl", hash = "sha256:0b2ba67bc9ef731c25a8901c7c84bdcb17720b32892507b263194fbc248b5e2a"},
+    {file = "hvplot-0.8.0.tar.gz", hash = "sha256:8630dba34969b105e267cbe14237e2d56d9969c801980ae5e5190bc18b2792d6"},
 ]
 idna = [
     {file = "idna-3.3-py3-none-any.whl", hash = "sha256:84d9dd047ffa80596e0f246e2eab0b391788b0503584e8945f2368256d2735ff"},
@@ -2083,6 +2085,7 @@ numpy = [
     {file = "numpy-1.22.3-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:8251ed96f38b47b4295b1ae51631de7ffa8260b5b087808ef09a39a9d66c97ab"},
     {file = "numpy-1.22.3-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:48a3aecd3b997bf452a2dedb11f4e79bc5bfd21a1d4cc760e703c31d57c84b3e"},
     {file = "numpy-1.22.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a3bae1a2ed00e90b3ba5f7bd0a7c7999b55d609e0c54ceb2b076a25e345fa9f4"},
+    {file = "numpy-1.22.3-cp310-cp310-win32.whl", hash = "sha256:f950f8845b480cffe522913d35567e29dd381b0dc7e4ce6a4a9f9156417d2430"},
     {file = "numpy-1.22.3-cp310-cp310-win_amd64.whl", hash = "sha256:08d9b008d0156c70dc392bb3ab3abb6e7a711383c3247b410b39962263576cd4"},
     {file = "numpy-1.22.3-cp38-cp38-macosx_10_14_x86_64.whl", hash = "sha256:201b4d0552831f7250a08d3b38de0d989d6f6e4658b709a02a73c524ccc6ffce"},
     {file = "numpy-1.22.3-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:f8c1f39caad2c896bc0018f699882b345b2a63708008be29b1f355ebf6f933fe"},
